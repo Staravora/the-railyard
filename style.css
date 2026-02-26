@@ -4,18 +4,18 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: #0f172a;
-  --surface: #1e293b;
-  --surface2: #334155;
-  --border: #475569;
-  --text: #f1f5f9;
-  --text-muted: #94a3b8;
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
+  --bg: #0d0d0f;
+  --surface: #141418;
+  --surface2: #1c1c22;
+  --border: #2a2a34;
+  --text: #e8e0d0;
+  --text-muted: #5c7a7a;
+  --accent: #c89010;
+  --accent-hover: #a87800;
   --green: #22c55e;
   --yellow: #eab308;
   --red: #ef4444;
-  --amber: #f59e0b;
+  --amber: #c89010;
   --header-h: 52px;
   --panel-w: 340px;
   --history-w: 300px;
@@ -58,10 +58,26 @@ html, body {
 .logo { font-size: 22px; }
 
 .app-header h1 {
-  font-size: 16px;
+  font-family: 'Oswald', sans-serif;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  font-size: 1.4rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
   white-space: nowrap;
+  position: relative;
+  padding-bottom: 2px;
+}
+
+.app-header h1::after {
+  content: '';
+  display: block;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-bottom: 1px solid var(--accent);
+  opacity: 0.5;
 }
 
 .tab-nav {
@@ -73,21 +89,27 @@ html, body {
 .tab-btn {
   background: transparent;
   border: 1px solid transparent;
+  border-bottom: 2px solid transparent;
   color: var(--text-muted);
   padding: 6px 16px;
   border-radius: var(--radius);
   cursor: pointer;
+  font-family: 'Oswald', sans-serif;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   transition: all 0.15s;
 }
 
 .tab-btn:hover { color: var(--text); background: var(--surface2); }
 
 .tab-btn.active {
-  color: var(--text);
-  background: var(--surface2);
-  border-color: var(--border);
+  color: var(--accent);
+  background: transparent;
+  border-color: transparent;
+  border-bottom-color: var(--accent);
+  border-bottom-width: 2px;
 }
 
 .header-right { flex-shrink: 0; }
@@ -191,6 +213,7 @@ html, body {
 }
 
 .toggle-label input { cursor: pointer; accent-color: var(--accent); }
+.toggle-label input[type="checkbox"] { accent-color: var(--accent); }
 
 /* Log mode banner */
 .log-mode-banner {
@@ -236,14 +259,15 @@ html, body {
 }
 
 .sidebar-title {
+  font-family: 'Oswald', sans-serif;
   font-size: 14px;
   font-weight: 700;
   padding: 14px 16px 8px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--accent);
 }
 
 .history-date {
@@ -270,7 +294,10 @@ html, body {
   text-align: center;
   color: var(--text-muted);
   padding: 24px;
-  font-size: 13px;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .history-card {
@@ -278,14 +305,17 @@ html, body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 10px;
-  transition: border-color 0.15s;
+  transition: border-left-color 0.15s, border-left-width 0.15s;
 }
 
-.history-card:hover { border-color: var(--accent); }
+.history-card:hover {
+  border-left: 2px solid var(--accent);
+}
 
 .history-card-year {
+  font-family: 'Oswald', sans-serif;
   font-size: 18px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--accent);
   line-height: 1;
   margin-bottom: 4px;
@@ -317,9 +347,8 @@ html, body {
   margin-bottom: 4px;
 }
 
-.history-card-type.event { background: #1e3a5f; color: #93c5fd; }
-.history-card-type.birth { background: #14532d; color: #86efac; }
-.history-card-type.death { background: #450a0a; color: #fca5a5; }
+.history-card-type.event { background: #2a1c00; color: var(--accent); }
+.history-card-type { font-family: 'Space Mono', monospace; }
 
 .history-empty {
   text-align: center;
@@ -436,7 +465,7 @@ html, body {
 }
 
 .badge-speed { background: #1e3a5f; color: #93c5fd; }
-.badge-ontime { background: #14532d; color: #86efac; }
+.badge-ontime { background: #2a1c00; color: var(--accent); }
 .badge-delay { background: #450a0a; color: #fca5a5; }
 .badge-early { background: #14532d; color: #86efac; }
 
@@ -518,7 +547,7 @@ html, body {
 }
 
 .stop-dot.passed { background: var(--border); }
-.stop-dot.next { background: var(--accent); box-shadow: 0 0 0 2px rgba(59,130,246,0.3); }
+.stop-dot.next { background: var(--accent); box-shadow: 0 0 0 2px rgba(200,144,16,0.3); }
 .stop-dot.future { background: var(--surface2); border: 1px solid var(--border); }
 
 .stop-info { flex: 1; }
@@ -809,7 +838,7 @@ html, body {
    LEAFLET OVERRIDES
    ============================================================ */
 .leaflet-control-attribution {
-  background: rgba(15, 23, 42, 0.8) !important;
+  background: rgba(13, 13, 15, 0.8) !important;
   color: var(--text-muted) !important;
   font-size: 10px !important;
 }

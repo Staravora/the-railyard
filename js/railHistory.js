@@ -40,7 +40,7 @@ const RailHistoryModule = (() => {
   }
 
   async function fetchRailEvents(month, day) {
-    const types = ['events', 'births', 'deaths'];
+    const types = ['events'];
     const allItems = [];
 
     await Promise.all(types.map(async (type) => {
