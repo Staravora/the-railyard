@@ -16,17 +16,18 @@ const MapModule = (() => {
       attributionControl: true,
     });
 
-    // OSM base layer
-    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19,
+    // CartoDB Dark Matter base layer
+    const osmLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &amp; © <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 20,
     });
 
     // OpenRailwayMap overlay
     railOverlay = L.tileLayer('https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png', {
       attribution: '© <a href="https://www.openrailwaymap.org/">OpenRailwayMap</a>',
       maxZoom: 19,
-      opacity: 0.7,
+      opacity: 0.8,
     });
 
     osmLayer.addTo(map);
