@@ -837,6 +837,11 @@ html, body {
 /* ============================================================
    LEAFLET OVERRIDES
    ============================================================ */
+/* Shift ORM orange → amber-gold, thin the visual weight */
+.rail-overlay-tiles {
+  filter: hue-rotate(35deg) saturate(0.65) brightness(0.8);
+}
+
 .leaflet-control-attribution {
   background: rgba(13, 13, 15, 0.8) !important;
   color: var(--text-muted) !important;

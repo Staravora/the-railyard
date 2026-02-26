@@ -27,7 +27,8 @@ const MapModule = (() => {
     railOverlay = L.tileLayer('https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png', {
       attribution: '© <a href="https://www.openrailwaymap.org/">OpenRailwayMap</a>',
       maxZoom: 19,
-      opacity: 0.8,
+      opacity: 0.55,
+      className: 'rail-overlay-tiles',
     });
 
     osmLayer.addTo(map);
