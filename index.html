@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Railyard — Live Amtrak Map</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-left">
+      <span class="logo">🚂</span>
+      <h1>The Railyard</h1>
+    </div>
+    <nav class="tab-nav" role="tablist">
+      <button class="tab-btn active" data-tab="map" role="tab" aria-selected="true">Live Map</button>
+      <button class="tab-btn" data-tab="spotter" role="tab" aria-selected="false">Spotter Log</button>
+    </nav>
+    <div class="header-right">
+      <span class="live-indicator" id="liveIndicator">
+        <span class="pulse-dot"></span> LIVE
+      </span>
+    </div>
+  </header>
+
+  <!-- Main content area -->
+  <main class="app-main">
+
+    <!-- MAP TAB -->
+    <section class="tab-pane active" id="tab-map" role="tabpanel">
+      <div class="map-layout">
+
+        <!-- Map container -->
+        <div id="map-container">
+          <div id="map"></div>
+
+          <!-- Map toolbar -->
+          <div class="map-toolbar">
+            <button class="toolbar-btn" id="logModeBtn" title="Toggle log mode — click map to add spotter entry">
+              📍 Log Mode
+            </button>
+            <div class="layer-toggle">
+              <label class="toggle-label">
+                <input type="checkbox" id="railOverlayToggle" checked />
+                Rail overlay
+              </label>
+            </div>
+          </div>
+
+          <!-- Log mode banner -->
+          <div class="log-mode-banner" id="logModeBanner" hidden>
+            📍 Log Mode Active — click anywhere on the map to record a sighting
+            <button id="logModeCancelBtn">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Sidebar: This Day in Rail -->
+        <aside class="history-sidebar">
+          <h2 class="sidebar-title">This Day in Rail</h2>
+          <p class="history-date" id="historyDate"></p>
+          <div id="railHistoryContent" class="history-cards">
+            <div class="history-loading">Loading rail history…</div>
+          </div>
+        </aside>
+
+      </div>
+    </section>
+
+    <!-- SPOTTER LOG TAB -->
+    <section class="tab-pane" id="tab-spotter" role="tabpanel" hidden>
+      <div class="spotter-layout">
+
+        <!-- Log form -->
+        <div class="spotter-form-panel">
+          <h2>Add Sighting</h2>
+          <form id="spotterForm" class="spotter-form">
+            <div class="form-row">
+              <label for="locoNumber">Locomotive #</label>
+              <input type="text" id="locoNumber" placeholder="e.g. 174" maxlength="10" />
+            </div>
+            <div class="form-row">
+              <label for="railroad">Railroad / Service</label>
+              <input type="text" id="railroad" placeholder="e.g. Amtrak California Zephyr" />
+            </div>
+            <div class="form-row">
+              <label for="spotDate">Date</label>
+              <input type="date" id="spotDate" />
+            </div>
+            <div class="form-row coords-row">
+              <label>Location</label>
+              <div class="coord-inputs">
+                <input type="number" id="spotLat" placeholder="Lat" step="any" />
+                <input type="number" id="spotLng" placeholder="Lng" step="any" />
+              </div>
+              <span class="coord-hint" id="coordHint"></span>
+            </div>
+            <div class="form-row">
+              <label for="spotNotes">Notes</label>
+              <textarea id="spotNotes" rows="3" placeholder="Weather, location description, consist details…"></textarea>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn-primary">Save Entry</button>
+              <button type="button" class="btn-secondary" id="clearFormBtn">Clear</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Log list -->
+        <div class="spotter-list-panel">
+          <div class="list-header">
+            <h2>My Sightings</h2>
+            <div class="list-controls">
+              <input type="search" id="spotterSearch" placeholder="Search entries…" />
+              <button class="btn-secondary" id="exportBtn">⬇ Export JSON</button>
+            </div>
+          </div>
+          <div id="spotterList" class="spotter-list">
+            <p class="empty-state">No sightings logged yet. Add your first entry!</p>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Train detail panel (slide-in) -->
+  <aside class="train-panel" id="trainPanel" aria-hidden="true">
+    <div class="panel-backdrop" id="panelBackdrop"></div>
+    <div class="panel-content">
+      <button class="panel-close" id="panelClose" aria-label="Close panel">✕</button>
+      <div id="panelBody"></div>
+    </div>
+  </aside>
+
+  <!-- Spotter entry modal (pre-filled from map click) -->
+  <div class="modal-overlay" id="spotterModal" hidden>
+    <div class="modal">
+      <h3>Log Sighting</h3>
+      <form id="modalSpotterForm" class="spotter-form">
+        <div class="form-row">
+          <label for="mLocoNumber">Locomotive #</label>
+          <input type="text" id="mLocoNumber" placeholder="e.g. 174" maxlength="10" />
+        </div>
+        <div class="form-row">
+          <label for="mRailroad">Railroad / Service</label>
+          <input type="text" id="mRailroad" placeholder="e.g. Amtrak California Zephyr" />
+        </div>
+        <div class="form-row">
+          <label for="mDate">Date</label>
+          <input type="date" id="mDate" />
+        </div>
+        <div class="form-row">
+          <label>Location</label>
+          <p class="modal-location" id="modalLocation"></p>
+        </div>
+        <div class="form-row">
+          <label for="mNotes">Notes</label>
+          <textarea id="mNotes" rows="3" placeholder="Consist details, weather…"></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn-primary">Save</button>
+          <button type="button" class="btn-secondary" id="modalCancelBtn">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Leaflet SlideTo plugin -->
+  <script src="https://unpkg.com/leaflet.marker.slideto@0.2.0/Leaflet.Marker.SlideTo.js"></script>
+
+  <!-- App modules -->
+  <script src="js/map.js"></script>
+  <script src="js/trainPanel.js"></script>
+  <script src="js/trains.js"></script>
+  <script src="js/spotterLog.js"></script>
+  <script src="js/railHistory.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
