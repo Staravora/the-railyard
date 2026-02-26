@@ -835,46 +835,46 @@ html, body {
 }
 
 /* ============================================================
-   LEAFLET OVERRIDES
+   MAPLIBRE GL OVERRIDES
    ============================================================ */
-/* Shift ORM orange → amber-gold, thin the visual weight */
-.rail-overlay-tiles {
-  filter: hue-rotate(12deg) saturate(0.75) brightness(0.9);
-}
-
-.leaflet-control-attribution {
+.maplibregl-ctrl-attrib {
   background: rgba(13, 13, 15, 0.8) !important;
   color: var(--text-muted) !important;
   font-size: 10px !important;
 }
 
-.leaflet-control-attribution a { color: var(--accent) !important; }
+.maplibregl-ctrl-attrib a { color: var(--accent) !important; }
 
-.leaflet-bar a {
+.maplibregl-ctrl-group {
   background: var(--surface) !important;
-  color: var(--text) !important;
   border-color: var(--border) !important;
+  box-shadow: var(--shadow) !important;
 }
 
-.leaflet-bar a:hover { background: var(--surface2) !important; }
+.maplibregl-ctrl-group button {
+  background: var(--surface) !important;
+  border-bottom-color: var(--border) !important;
+  color: var(--text) !important;
+}
 
-/* ============================================================
-   CUSTOM TRAIN MARKERS — tooltip
-   ============================================================ */
-.train-tooltip {
+.maplibregl-ctrl-group button:hover { background: var(--surface2) !important; }
+
+/* Train / spotter hover tooltip */
+.train-tooltip-popup .maplibregl-popup-content {
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text);
+  font-family: system-ui, -apple-system, sans-serif;
   font-size: 11px;
   font-weight: 600;
-  padding: 3px 7px;
+  padding: 5px 9px;
   border-radius: 4px;
+  box-shadow: var(--shadow);
   white-space: nowrap;
 }
 
-.leaflet-tooltip.leaflet-tooltip-bottom::before {
-  border-bottom-color: var(--border);
-}
+.train-tooltip-popup .maplibregl-popup-tip { border-top-color: var(--border) !important; }
+.train-tooltip-popup .maplibregl-popup-close-button { display: none; }
 
 /* ============================================================
    RESPONSIVE

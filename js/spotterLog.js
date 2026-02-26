@@ -69,21 +69,21 @@ const SpotterLogModule = (() => {
     logModeActive = true;
     document.getElementById('logModeBtn').classList.add('active');
     document.getElementById('logModeBanner').hidden = false;
-    map.getContainer().style.cursor = 'crosshair';
+    map.getCanvas().style.cursor = 'crosshair';
   }
 
   function disableLogMode() {
     logModeActive = false;
     document.getElementById('logModeBtn').classList.remove('active');
     document.getElementById('logModeBanner').hidden = true;
-    map.getContainer().style.cursor = '';
+    map.getCanvas().style.cursor = '';
     pendingCoords = null;
   }
 
   function onMapClick(e) {
     if (!logModeActive) return;
 
-    const { lat, lng } = e.latlng;
+    const { lat, lng } = e.lngLat;
     pendingCoords = { lat: lat.toFixed(5), lng: lng.toFixed(5) };
 
     openModal(pendingCoords);
@@ -253,39 +253,45 @@ const SpotterLogModule = (() => {
 
   // ── Map Pins ─────────────────────────────────────────────────
 
-  function makeSpotterIcon() {
-    return L.divIcon({
-      html: `<svg width="28" height="34" viewBox="0 0 28 34" style="display:block;">
-               <path d="M14 0 C6.27 0 0 6.27 0 14 C0 24.5 14 34 14 34 C14 34 28 24.5 28 14 C28 6.27 21.73 0 14 0Z"
-                     fill="#f59e0b" stroke="#92400e" stroke-width="1.5"/>
-               <circle cx="14" cy="14" r="5" fill="white"/>
-             </svg>`,
-      iconSize: [28, 34],
-      iconAnchor: [14, 34],
-      className: '',
-    });
+  function makeSpotterEl() {
+    const el = document.createElement('div');
+    el.style.cssText = 'cursor: pointer; width: 28px; height: 34px;';
+    el.innerHTML = `<svg width="28" height="34" viewBox="0 0 28 34" style="display:block;">
+      <path d="M14 0 C6.27 0 0 6.27 0 14 C0 24.5 14 34 14 34 C14 34 28 24.5 28 14 C28 6.27 21.73 0 14 0Z"
+            fill="#c89010" stroke="#7a5500" stroke-width="1.5"/>
+      <circle cx="14" cy="14" r="5" fill="white"/>
+    </svg>`;
+    return el;
   }
 
   function renderMapPins() {
     // Remove old pins
-    pinMarkers.forEach(m => m.remove());
+    pinMarkers.forEach(({ marker, popup }) => { popup.remove(); marker.remove(); });
     pinMarkers.clear();
 
     entries.forEach(entry => {
       if (entry.lat == null || entry.lng == null) return;
 
-      const marker = L.marker([entry.lat, entry.lng], { icon: makeSpotterIcon() });
-
+      const el = makeSpotterEl();
       const loco = entry.locomotiveNumber || '?';
       const rr = entry.railroad || '';
       const date = entry.date || '';
-      marker.bindTooltip(
-        `<b>#${esc(loco)}</b>${rr ? ` · ${esc(rr)}` : ''}<br>${date}`,
-        { className: 'train-tooltip', direction: 'top', offset: [0, -36] }
-      );
 
-      marker.addTo(layer);
-      pinMarkers.set(entry.id, marker);
+      const popup = new maplibregl.Popup({
+        offset: [0, -36],
+        closeButton: false,
+        closeOnClick: false,
+        className: 'train-tooltip-popup',
+      }).setHTML(`<b>#${esc(loco)}</b>${rr ? ` · ${esc(rr)}` : ''}<br>${date}`);
+
+      const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+        .setLngLat([entry.lng, entry.lat])
+        .addTo(layer);
+
+      el.addEventListener('mouseenter', () => popup.setLngLat(marker.getLngLat()).addTo(layer));
+      el.addEventListener('mouseleave', () => popup.remove());
+
+      pinMarkers.set(entry.id, { marker, popup });
     });
   }
 

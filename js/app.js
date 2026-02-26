@@ -26,7 +26,7 @@
 
     // 7. Invalidate map size after tab switch
     // (Leaflet needs to know its real dimensions)
-    MapModule.getMap().invalidateSize();
+    MapModule.getMap().resize();
   }
 
   // ── Tab Navigation ─────────────────────────────────────────────
@@ -56,7 +56,7 @@
         // is shown after being hidden
         if (targetTab === 'map') {
           requestAnimationFrame(() => {
-            MapModule.getMap().invalidateSize();
+            MapModule.getMap().resize();
           });
         }
       });

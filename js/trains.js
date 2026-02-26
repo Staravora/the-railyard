@@ -6,7 +6,7 @@ const TrainsModule = (() => {
   const API_URL = 'https://api-v3.amtraker.com/v3/trains';
   const POLL_INTERVAL_MS = 30000;
 
-  // Map from train key → { marker, data }
+  // Map from train key → { marker, el, popup, data, animFrame }
   const activeMarkers = new Map();
   let pollTimer = null;
   let layer = null;
@@ -14,43 +14,56 @@ const TrainsModule = (() => {
   // ── Icon helpers ──────────────────────────────────────────────
 
   function speedColor(speed) {
-    if (speed >= 60) return '#22c55e';   // green
-    if (speed >= 20) return '#eab308';   // yellow
-    return '#ef4444';                     // red
+    if (speed >= 60) return '#22c55e';
+    if (speed >= 20) return '#eab308';
+    return '#ef4444';
   }
 
-  function makeMovingIcon(heading, speed) {
-    const color = speedColor(speed);
-    const rot = heading || 0;
-    return L.divIcon({
-      html: `<svg width="24" height="24" viewBox="0 0 24 24" style="transform:rotate(${rot}deg);display:block;">
-               <path d="M12 2 L20 20 L12 16 L4 20 Z" fill="${color}" stroke="white" stroke-width="1.5"/>
-             </svg>`,
-      iconSize: [24, 24],
-      iconAnchor: [12, 12],
-      className: '',
-    });
+  function makeMarkerEl() {
+    const el = document.createElement('div');
+    el.style.cssText = 'cursor: pointer; width: 24px; height: 24px;';
+    return el;
   }
 
-  function makeStoppedIcon() {
-    return L.divIcon({
-      html: `<svg width="16" height="16" viewBox="0 0 16 16" style="display:block;">
-               <circle cx="8" cy="8" r="7" fill="#94a3b8" stroke="white" stroke-width="1.5"/>
-               <rect x="5" y="5" width="6" height="6" fill="white" rx="1"/>
-             </svg>`,
-      iconSize: [16, 16],
-      iconAnchor: [8, 8],
-      className: '',
-    });
+  function updateMarkerEl(el, train) {
+    const isStopped = train.speed <= 5;
+    if (isStopped) {
+      el.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" style="display:block;margin:4px auto;">
+        <circle cx="8" cy="8" r="7" fill="#94a3b8" stroke="white" stroke-width="1.5"/>
+        <rect x="5" y="5" width="6" height="6" fill="white" rx="1"/>
+      </svg>`;
+    } else {
+      const color = speedColor(train.speed);
+      const rot = train.heading || 0;
+      el.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" style="transform:rotate(${rot}deg);display:block;">
+        <path d="M12 2 L20 20 L12 16 L4 20 Z" fill="${color}" stroke="white" stroke-width="1.5"/>
+      </svg>`;
+    }
+  }
+
+  // ── Smooth position animation ─────────────────────────────────
+
+  function animateMarker(entry, newLat, newLng) {
+    if (entry.animFrame) cancelAnimationFrame(entry.animFrame);
+    const start = entry.marker.getLngLat();
+    const startLng = start.lng;
+    const startLat = start.lat;
+    const startTime = performance.now();
+    const duration = 29000;
+
+    function step(now) {
+      const t = Math.min((now - startTime) / duration, 1);
+      entry.marker.setLngLat([
+        startLng + (newLng - startLng) * t,
+        startLat + (newLat - startLat) * t,
+      ]);
+      if (t < 1) entry.animFrame = requestAnimationFrame(step);
+    }
+    entry.animFrame = requestAnimationFrame(step);
   }
 
   // ── Normalize API response ────────────────────────────────────
 
-  /**
-   * Amtraker v3 returns an object keyed by train number,
-   * each value is an array of train runs (a train number can have
-   * multiple consists running). We flatten to a single array.
-   */
   function normalizeResponse(raw) {
     const trains = [];
 
@@ -58,15 +71,11 @@ const TrainsModule = (() => {
       if (!Array.isArray(runs)) continue;
 
       runs.forEach((run, idx) => {
-        // Skip if no position data
         if (run.lat == null || run.lon == null) return;
 
         const stops = Array.isArray(run.stations) ? run.stations : [];
-
-        // Find next stop (first not yet arrived)
         const nextStop = stops.find(s => !s.arrDT || new Date(s.arrDT) > new Date());
 
-        // Compute delay in minutes from last station
         let delayMinutes = 0;
         const lastUpdated = stops.findLast ? stops.findLast(s => s.arrDT) : null;
         if (lastUpdated && lastUpdated.arrDT && lastUpdated.schArrDT) {
@@ -74,12 +83,8 @@ const TrainsModule = (() => {
             (new Date(lastUpdated.arrDT) - new Date(lastUpdated.schArrDT)) / 60000
           );
         }
-        // Fall back to API-provided delay if available
-        if (run.eventAr != null) {
-          delayMinutes = Math.round(run.eventAr);
-        }
+        if (run.eventAr != null) delayMinutes = Math.round(run.eventAr);
 
-        // Route progress: index of next stop / total stops
         const nextStopIdx = nextStop ? stops.indexOf(nextStop) : stops.length;
         const progress = stops.length > 0 ? nextStopIdx / stops.length : 0;
 
@@ -127,22 +132,15 @@ const TrainsModule = (() => {
       if (activeMarkers.has(train.id)) {
         // Update existing marker
         const entry = activeMarkers.get(train.id);
-        const isStopped = train.speed <= 5;
 
         // Update icon
-        entry.marker.setIcon(
-          isStopped ? makeStoppedIcon() : makeMovingIcon(train.heading, train.speed)
-        );
+        updateMarkerEl(entry.el, train);
 
-        // Slide to new position
-        if (typeof entry.marker.slideTo === 'function') {
-          entry.marker.slideTo([train.lat, train.lng], { duration: 29000, keepAtCenter: false });
-        } else {
-          entry.marker.setLatLng([train.lat, train.lng]);
-        }
+        // Animate to new position (lng, lat order for MapLibre)
+        animateMarker(entry, train.lat, train.lng);
 
-        // Update tooltip
-        entry.marker.setTooltipContent(tooltipContent(train));
+        // Update popup content
+        entry.popup.setHTML(tooltipContent(train));
         entry.data = train;
 
         // Update panel if this train is currently open
@@ -151,32 +149,36 @@ const TrainsModule = (() => {
         }
       } else {
         // Create new marker
-        const isStopped = train.speed <= 5;
-        const icon = isStopped ? makeStoppedIcon() : makeMovingIcon(train.heading, train.speed);
+        const el = makeMarkerEl();
+        updateMarkerEl(el, train);
 
-        const marker = L.marker([train.lat, train.lng], { icon });
+        const popup = new maplibregl.Popup({
+          offset: 14,
+          closeButton: false,
+          closeOnClick: false,
+          className: 'train-tooltip-popup',
+        }).setHTML(tooltipContent(train));
 
-        marker.bindTooltip(tooltipContent(train), {
-          permanent: false,
-          direction: 'top',
-          className: 'train-tooltip',
-          offset: [0, -14],
+        const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+          .setLngLat([train.lng, train.lat])
+          .addTo(layer);
+
+        el.addEventListener('mouseenter', () => popup.setLngLat(marker.getLngLat()).addTo(layer));
+        el.addEventListener('mouseleave', () => popup.remove());
+        el.addEventListener('click', e => {
+          e.stopPropagation();
+          if (typeof TrainPanelModule !== 'undefined') TrainPanelModule.open(train);
         });
 
-        marker.on('click', () => {
-          if (typeof TrainPanelModule !== 'undefined') {
-            TrainPanelModule.open(train);
-          }
-        });
-
-        marker.addTo(layer);
-        activeMarkers.set(train.id, { marker, data: train });
+        activeMarkers.set(train.id, { marker, el, popup, data: train, animFrame: null });
       }
     });
 
     // Remove departed trains
     for (const [id, entry] of activeMarkers.entries()) {
       if (!seenIds.has(id)) {
+        if (entry.animFrame) cancelAnimationFrame(entry.animFrame);
+        entry.popup.remove();
         entry.marker.remove();
         activeMarkers.delete(id);
       }
