@@ -959,9 +959,7 @@ body::before {
 }
 
 .app-header,
-.app-main,
-.train-panel,
-.modal-overlay {
+.app-main {
   position: relative;
   z-index: 2;
 }

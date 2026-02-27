@@ -139,7 +139,11 @@ const TrainsModule = (() => {
 
         // Slide to new position
         if (typeof entry.marker.slideTo === 'function') {
-          entry.marker.slideTo([train.lat, train.lng], { duration: 29000, keepAtCenter: false });
+          try {
+            entry.marker.slideTo([train.lat, train.lng], { duration: 29000, keepAtCenter: false });
+          } catch {
+            entry.marker.setLatLng([train.lat, train.lng]);
+          }
         } else {
           entry.marker.setLatLng([train.lat, train.lng]);
         }
@@ -201,14 +205,18 @@ const TrainsModule = (() => {
     const onTimeCount = trains.filter(train => train.delayMinutes <= 5).length;
     const onTimePct = activeCount > 0 ? Math.round((onTimeCount / activeCount) * 100) : 0;
 
-    document.dispatchEvent(new CustomEvent('railyard:train-stats', {
-      detail: {
-        activeCount,
-        delayedCount,
-        onTimePct,
-        updatedAt: new Date().toISOString()
-      }
-    }));
+    try {
+      document.dispatchEvent(new CustomEvent('railyard:train-stats', {
+        detail: {
+          activeCount,
+          delayedCount,
+          onTimePct,
+          updatedAt: new Date().toISOString()
+        }
+      }));
+    } catch {
+      // Ignore HUD event failures to avoid blocking map updates.
+    }
   }
 
   // ── Public API ────────────────────────────────────────────────
