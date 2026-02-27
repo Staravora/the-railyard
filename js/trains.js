@@ -1,29 +1,21 @@
 /**
- * trains.js — Poll Amtraker API and run a route-based motion simulation.
+ * trains.js — Stability-first live train motion engine.
  */
 
 const TrainsModule = (() => {
   const API_URL = 'https://api-v3.amtraker.com/v3/trains';
-  const STATIONS_URL = 'https://api-v3.amtraker.com/v3/stations';
-
   const POLL_INTERVAL_MS = 30000;
   const SIM_TICK_MS = 1000;
 
-  const MIN_DIRECTION_DELTA_M = 120;
-  const HARD_RESYNC_DELTA_M = 6000;
-  const BLEND_WINDOW_SEC = 8;
-  const STALE_DATA_SEC = 90;
-  const MAX_PREDICTION_HORIZON_SEC = 45;
-  const HIGH_ZOOM_LOCAL_MODE = 10;
+  const MIN_OBS_MOVE_M = 45;
+  const MAX_PREDICT_SEC = 20;
+  const STALE_START_SEC = 10;
+  const STALE_STOP_SEC = 32;
 
   const activeMarkers = new Map();
-  const routeCache = new Map();
-
   let pollTimer = null;
   let simTimer = null;
   let layer = null;
-  let stationIndex = null;
-  let stationFetchInFlight = null;
 
   function speedColor(speed) {
     if (speed >= 60) return '#4ade80';
@@ -51,32 +43,8 @@ const TrainsModule = (() => {
     });
   }
 
-  async function ensureStationIndex() {
-    if (stationIndex) return stationIndex;
-    if (stationFetchInFlight) return stationFetchInFlight;
-
-    stationFetchInFlight = (async () => {
-      try {
-        const res = await fetch(STATIONS_URL, { cache: 'no-store' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        stationIndex = data && typeof data === 'object' ? data : {};
-      } catch (err) {
-        console.warn('[trains] station index fetch failed:', err.message);
-        stationIndex = {};
-      }
-      return stationIndex;
-    })();
-
-    return stationFetchInFlight;
-  }
-
   function getStopName(stop) {
     return stop.stationName || stop.name || stop.code || '?';
-  }
-
-  function getStopCode(stop) {
-    return stop.code || stop.stationCode || null;
   }
 
   function getStopArrISO(stop) {
@@ -85,51 +53,6 @@ const TrainsModule = (() => {
 
   function getStopSchArrISO(stop) {
     return stop.schArrDT || stop.schArr || null;
-  }
-
-  function buildRouteFromStops(stops) {
-    if (!stationIndex || !Array.isArray(stops) || stops.length < 2) return null;
-
-    const routeKey = stops
-      .map(getStopCode)
-      .filter(Boolean)
-      .join('>');
-
-    if (!routeKey) return null;
-    if (routeCache.has(routeKey)) return routeCache.get(routeKey);
-
-    const points = [];
-    let lastKey = '';
-
-    stops.forEach(stop => {
-      const code = getStopCode(stop);
-      if (!code) return;
-
-      const station = stationIndex[code];
-      if (!station || station.lat == null || station.lon == null) return;
-
-      const key = `${station.lat},${station.lon}`;
-      if (key === lastKey) return;
-      lastKey = key;
-
-      points.push({ lat: station.lat, lng: station.lon });
-    });
-
-    if (points.length < 2) {
-      routeCache.set(routeKey, null);
-      return null;
-    }
-
-    const cumulative = [0];
-    let total = 0;
-    for (let i = 1; i < points.length; i += 1) {
-      total += haversineMeters(points[i - 1], points[i]);
-      cumulative.push(total);
-    }
-
-    const route = total > 0 ? { key: routeKey, points, cumulative, total } : null;
-    routeCache.set(routeKey, route);
-    return route;
   }
 
   function normalizeResponse(raw) {
@@ -168,7 +91,7 @@ const TrainsModule = (() => {
           lat: run.lat,
           lng: run.lon,
           speed: run.velocity != null ? Math.round(run.velocity) : 0,
-          heading: run.heading || 0,
+          heading: normalizeHeading(run.heading || 0),
           delayMinutes,
           nextStop: nextStop ? getStopName(nextStop) : null,
           nextStopEta: nextStop ? (getStopArrISO(nextStop) || getStopSchArrISO(nextStop) || null) : null,
@@ -176,12 +99,63 @@ const TrainsModule = (() => {
           destination: stops.length > 0 ? getStopName(stops[stops.length - 1]) : null,
           progress: Math.max(0, Math.min(1, progress)),
           stops,
-          route: buildRouteFromStops(stops),
         });
       });
     }
 
     return trains;
+  }
+
+  function createState(train, nowMs) {
+    return {
+      anchorLat: train.lat,
+      anchorLng: train.lng,
+      anchorMs: nowMs,
+      headingDeg: train.heading,
+      speedMps: Math.max(0, train.speed) * 0.44704,
+      lastObsLat: train.lat,
+      lastObsLng: train.lng,
+      lastObsMs: nowMs,
+      hasMeasuredVector: false,
+      stalePolls: 0,
+    };
+  }
+
+  function reconcileState(state, train, nowMs) {
+    const prevObs = { lat: state.lastObsLat, lng: state.lastObsLng };
+    const nextObs = { lat: train.lat, lng: train.lng };
+    const dtSec = Math.max(1, (nowMs - state.lastObsMs) / 1000);
+    const moveM = haversineMeters(prevObs, nextObs);
+
+    const feedMps = Math.max(0, train.speed) * 0.44704;
+
+    if (moveM >= MIN_OBS_MOVE_M) {
+      const measuredHeading = bearingDegrees(prevObs, nextObs);
+      const measuredMps = moveM / dtSec;
+      state.headingDeg = measuredHeading;
+      state.speedMps = (measuredMps * 0.75) + (feedMps * 0.25);
+      state.hasMeasuredVector = true;
+      state.stalePolls = 0;
+    } else if (feedMps <= 1.5) {
+      state.speedMps = 0;
+      state.hasMeasuredVector = false;
+      state.stalePolls += 1;
+    } else {
+      state.stalePolls += 1;
+      if (!state.hasMeasuredVector) {
+        state.speedMps = 0;
+      } else {
+        const damp = state.stalePolls >= 2 ? 0.35 : 0.6;
+        state.speedMps = Math.min(state.speedMps * damp, feedMps * damp);
+      }
+    }
+
+    state.anchorLat = train.lat;
+    state.anchorLng = train.lng;
+    state.anchorMs = nowMs;
+    state.lastObsLat = train.lat;
+    state.lastObsLng = train.lng;
+    state.lastObsMs = nowMs;
   }
 
   async function fetchAndUpdate() {
@@ -205,18 +179,20 @@ const TrainsModule = (() => {
       if (activeMarkers.has(train.id)) {
         const entry = activeMarkers.get(train.id);
         entry.data = train;
-        entry.marker.setIcon(train.speed <= 5 ? makeStoppedIcon() : makeMovingIcon(train.heading, train.speed));
-        entry.marker.setTooltipContent(tooltipContent(train));
+        reconcileState(entry.state, train, nowMs);
 
-        reconcileSimulation(entry.sim, train, nowMs);
+        entry.marker.setIcon(train.speed <= 5 ? makeStoppedIcon() : makeMovingIcon(entry.state.headingDeg, train.speed));
+        entry.marker.setTooltipContent(tooltipContent(train));
+        entry.marker.setLatLng([train.lat, train.lng]);
         entry.lastTickMs = nowMs;
 
         if (typeof TrainPanelModule !== 'undefined') {
           TrainPanelModule.update(train);
         }
       } else {
+        const state = createState(train, nowMs);
         const marker = L.marker([train.lat, train.lng], {
-          icon: train.speed <= 5 ? makeStoppedIcon() : makeMovingIcon(train.heading, train.speed)
+          icon: train.speed <= 5 ? makeStoppedIcon() : makeMovingIcon(state.headingDeg, train.speed)
         });
 
         marker.bindTooltip(tooltipContent(train), {
@@ -228,19 +204,16 @@ const TrainsModule = (() => {
 
         marker.on('click', () => {
           if (typeof TrainPanelModule !== 'undefined') {
-            TrainPanelModule.open(train);
+            TrainPanelModule.open(activeMarkers.get(train.id)?.data || train);
           }
         });
 
         marker.addTo(layer);
 
-        const sim = createSimState(train, nowMs);
-        marker.setLatLng([sim.lat, sim.lng]);
-
         activeMarkers.set(train.id, {
           marker,
           data: train,
-          sim,
+          state,
           lastTickMs: nowMs,
         });
       }
@@ -256,301 +229,79 @@ const TrainsModule = (() => {
     publishStats(trains);
   }
 
-  function createSimState(train, nowMs) {
-    const route = train.route;
-
-    if (route) {
-      const snap = projectOntoRoute(route, { lat: train.lat, lng: train.lng });
-      const s = snap ? snap.s : 0;
-      const pt = interpolateRoutePoint(route, s);
-
-      return {
-        mode: 'route',
-        route,
-        s,
-        lat: pt.lat,
-        lng: pt.lng,
-        speedMph: Math.max(0, train.speed || 0),
-        direction: inferDirectionFromHeading(route, s, train.heading || 0, 1),
-        confidence: 1,
-        lastApiMs: nowMs,
-        lastApiS: s,
-        correctionDelta: 0,
-        correctionRemainingSec: 0,
-        stalePolls: 0,
-        apiLat: train.lat,
-        apiLng: train.lng,
-        apiHeading: normalizeHeading(train.heading || 0),
-        apiVectorHeading: null,
-        apiVectorSpeedMph: Math.max(0, train.speed || 0),
-        apiVectorMs: 0,
-      };
-    }
-
-    return {
-      mode: 'heading',
-      route: null,
-      s: 0,
-      lat: train.lat,
-      lng: train.lng,
-      speedMph: Math.max(0, train.speed || 0),
-      direction: 1,
-      heading: normalizeHeading(train.heading || 0),
-      confidence: 0.35,
-      lastApiMs: nowMs,
-      correctionDelta: 0,
-      correctionRemainingSec: 0,
-      stalePolls: 0,
-      apiLat: train.lat,
-      apiLng: train.lng,
-      apiHeading: normalizeHeading(train.heading || 0),
-      apiVectorHeading: null,
-      apiVectorSpeedMph: Math.max(0, train.speed || 0),
-      apiVectorMs: 0,
-    };
-  }
-
-  function reconcileSimulation(sim, train, nowMs) {
-    const prevApiPoint = { lat: sim.apiLat ?? train.lat, lng: sim.apiLng ?? train.lng };
-    const currApiPoint = { lat: train.lat, lng: train.lng };
-    const apiMoveMeters = haversineMeters(prevApiPoint, currApiPoint);
-    const apiMoveSec = Math.max(1, (nowMs - (sim.lastApiMs || nowMs)) / 1000);
-    if (apiMoveMeters >= 60) {
-      sim.apiVectorHeading = bearingDegrees(prevApiPoint, currApiPoint);
-      sim.apiVectorSpeedMph = (apiMoveMeters / apiMoveSec) * 2.236936;
-      sim.apiVectorMs = nowMs;
-    }
-    sim.apiLat = train.lat;
-    sim.apiLng = train.lng;
-    sim.apiHeading = normalizeHeading(train.heading || sim.apiHeading || 0);
-
-    sim.lastApiMs = nowMs;
-
-    if (!train.route) {
-      sim.mode = 'heading';
-      sim.route = null;
-      sim.heading = normalizeHeading(train.heading || sim.heading || 0);
-      sim.speedMph = Math.max(0, train.speed || 0);
-      sim.lat = train.lat;
-      sim.lng = train.lng;
-      return;
-    }
-
-    const route = train.route;
-    const snap = projectOntoRoute(route, { lat: train.lat, lng: train.lng });
-    if (!snap) return;
-
-    const apiS = snap.s;
-    const apiPoint = interpolateRoutePoint(route, apiS);
-
-    if (sim.mode !== 'route' || !sim.route || sim.route.key !== route.key) {
-      sim.mode = 'route';
-      sim.route = route;
-      sim.s = apiS;
-      sim.lat = apiPoint.lat;
-      sim.lng = apiPoint.lng;
-      sim.speedMph = Math.max(0, train.speed || 0);
-      sim.direction = inferDirectionFromHeading(route, apiS, train.heading || 0, sim.direction || 1);
-      sim.confidence = 1;
-      sim.lastApiS = apiS;
-      sim.correctionDelta = 0;
-      sim.correctionRemainingSec = 0;
-      sim.stalePolls = 0;
-      return;
-    }
-
-    const prevApiS = typeof sim.lastApiS === 'number' ? sim.lastApiS : apiS;
-    const apiDelta = apiS - prevApiS;
-    const movedEnough = Math.abs(apiDelta) >= MIN_DIRECTION_DELTA_M;
-
-    if (movedEnough) {
-      sim.direction = apiDelta >= 0 ? 1 : -1;
-      sim.stalePolls = 0;
-    } else {
-      sim.stalePolls += 1;
-      sim.direction = inferDirectionFromHeading(route, apiS, train.heading || 0, sim.direction || 1);
-    }
-
-    sim.lastApiS = apiS;
-    sim.speedMph = Math.max(0, train.speed || sim.speedMph || 0);
-
-    const simToApi = apiS - sim.s;
-    const absDelta = Math.abs(simToApi);
-
-    if (absDelta > HARD_RESYNC_DELTA_M) {
-      sim.s = apiS;
-      sim.lat = apiPoint.lat;
-      sim.lng = apiPoint.lng;
-      sim.correctionDelta = 0;
-      sim.correctionRemainingSec = 0;
-      sim.confidence = 0.25;
-      return;
-    }
-
-    sim.correctionDelta = simToApi;
-    sim.correctionRemainingSec = BLEND_WINDOW_SEC;
-    sim.confidence = Math.max(0.45, 1 - (absDelta / HARD_RESYNC_DELTA_M));
-  }
-
   function simulateMovement() {
     const nowMs = Date.now();
-    const map = typeof MapModule !== 'undefined' ? MapModule.getMap() : null;
-    const zoom = map ? map.getZoom() : 6;
 
     activeMarkers.forEach(entry => {
-      const sim = entry.sim;
-      if (!sim) return;
+      const state = entry.state;
+      if (!state) return;
 
       const dtSec = Math.max(0.2, Math.min(2, (nowMs - (entry.lastTickMs || nowMs)) / 1000));
       entry.lastTickMs = nowMs;
 
-      if (sim.mode === 'route' && sim.route) {
-        if (zoom >= HIGH_ZOOM_LOCAL_MODE) {
-          const sinceApiSec = Math.max(0, (nowMs - sim.lastApiMs) / 1000);
-          const horizonSec = Math.min(25, (POLL_INTERVAL_MS / 1000) * 0.9);
-          const projectionSec = Math.min(sinceApiSec, horizonSec);
-          const vectorAgeSec = sim.apiVectorMs > 0 ? (nowMs - sim.apiVectorMs) / 1000 : Infinity;
-          const hasReliableVector = sim.apiVectorHeading != null && vectorAgeSec <= ((POLL_INTERVAL_MS / 1000) * 2);
+      const obsAgeSec = Math.max(0, (nowMs - state.anchorMs) / 1000);
+      const ageHorizon = Math.min(MAX_PREDICT_SEC, (POLL_INTERVAL_MS / 1000) * 0.7);
+      const predictSec = Math.min(obsAgeSec, ageHorizon);
 
-          const heading = hasReliableVector ? sim.apiVectorHeading : sim.apiHeading;
-          const speedMph = hasReliableVector
-            ? ((sim.apiVectorSpeedMph * 0.65) + (sim.speedMph * 0.35))
-            : 0;
+      let speedMps = state.speedMps;
+      if (obsAgeSec > STALE_START_SEC) {
+        const t = Math.min(1, (obsAgeSec - STALE_START_SEC) / Math.max(1, STALE_STOP_SEC - STALE_START_SEC));
+        speedMps *= (1 - t);
+      }
 
-          const projected = projectLatLng(sim.apiLat, sim.apiLng, heading, speedMph, projectionSec);
-          const capMeters = Math.max(450, speedMph * 0.44704 * horizonSec);
-          const distFromFix = haversineMeters({ lat: sim.apiLat, lng: sim.apiLng }, projected);
-          const clamped = distFromFix > capMeters
-            ? pointFromBearing({ lat: sim.apiLat, lng: sim.apiLng }, heading, capMeters)
-            : projected;
-
-          sim.lat = clamped.lat;
-          sim.lng = clamped.lng;
-          entry.marker.setLatLng([clamped.lat, clamped.lng]);
-          return;
-        }
-
-        const staleSec = (nowMs - sim.lastApiMs) / 1000;
-        const staleFactor = staleSec <= STALE_DATA_SEC
-          ? 1
-          : Math.max(0.15, 1 - ((staleSec - STALE_DATA_SEC) / MAX_PREDICTION_HORIZON_SEC));
-
-        const baseMeters = sim.speedMph * 0.44704 * dtSec * staleFactor;
-        sim.s = clamp(sim.s + (baseMeters * sim.direction), 0, sim.route.total);
-
-        if (sim.correctionRemainingSec > 0 && Math.abs(sim.correctionDelta) > 0.01) {
-          const portion = Math.min(1, dtSec / sim.correctionRemainingSec);
-          const step = sim.correctionDelta * portion;
-          sim.s += step;
-          sim.correctionDelta -= step;
-          sim.correctionRemainingSec = Math.max(0, sim.correctionRemainingSec - dtSec);
-          sim.s = clamp(sim.s, 0, sim.route.total);
-        }
-
-        const point = interpolateRoutePoint(sim.route, sim.s);
-        sim.lat = point.lat;
-        sim.lng = point.lng;
-        entry.marker.setLatLng([point.lat, point.lng]);
+      if (speedMps <= 0.4) {
         return;
       }
 
-      if (sim.mode === 'heading') {
-        const projected = projectLatLng(sim.lat, sim.lng, sim.heading || 0, sim.speedMph || 0, dtSec);
-        sim.lat = projected.lat;
-        sim.lng = projected.lng;
-        entry.marker.setLatLng([projected.lat, projected.lng]);
-      }
+      const target = projectLatLng(
+        state.anchorLat,
+        state.anchorLng,
+        state.headingDeg,
+        speedMps / 0.44704,
+        predictSec
+      );
+
+      const current = entry.marker.getLatLng();
+      const alpha = 1 - Math.exp(-dtSec / 1.2);
+      const next = {
+        lat: current.lat + ((target.lat - current.lat) * alpha),
+        lng: current.lng + ((target.lng - current.lng) * alpha),
+      };
+
+      entry.marker.setLatLng([next.lat, next.lng]);
     });
   }
 
-  function interpolateRoutePoint(route, s) {
-    if (s <= 0) return route.points[0];
-    if (s >= route.total) return route.points[route.points.length - 1];
+  function tooltipContent(train) {
+    const delay = train.delayMinutes > 0
+      ? `<span style="color:#fb7185">+${train.delayMinutes}m late</span>`
+      : `<span style="color:#4ade80">On time</span>`;
+    return `<b>${train.routeName} #${train.trainNumber}</b><br>${train.speed} mph · ${delay}`;
+  }
 
-    let segmentIdx = 0;
-    while (segmentIdx < route.cumulative.length - 1 && route.cumulative[segmentIdx + 1] < s) {
-      segmentIdx += 1;
+  function publishStats(trains) {
+    const activeCount = trains.length;
+    const delayedCount = trains.filter(train => train.delayMinutes > 5).length;
+    const onTimeCount = trains.filter(train => train.delayMinutes <= 5).length;
+    const onTimePct = activeCount > 0 ? Math.round((onTimeCount / activeCount) * 100) : 0;
+
+    try {
+      document.dispatchEvent(new CustomEvent('railyard:train-stats', {
+        detail: {
+          activeCount,
+          delayedCount,
+          onTimePct,
+          updatedAt: new Date().toISOString()
+        }
+      }));
+    } catch {
+      // Ignore HUD event failures.
     }
-
-    const start = route.points[segmentIdx];
-    const end = route.points[segmentIdx + 1];
-    const segStart = route.cumulative[segmentIdx];
-    const segLen = route.cumulative[segmentIdx + 1] - segStart;
-    const t = segLen > 0 ? (s - segStart) / segLen : 0;
-
-    return {
-      lat: start.lat + ((end.lat - start.lat) * t),
-      lng: start.lng + ((end.lng - start.lng) * t),
-    };
-  }
-
-  function projectOntoRoute(route, point) {
-    let best = null;
-
-    for (let i = 0; i < route.points.length - 1; i += 1) {
-      const a = route.points[i];
-      const b = route.points[i + 1];
-      const proj = projectPointToSegment(point, a, b);
-      const segStart = route.cumulative[i];
-      const segLen = route.cumulative[i + 1] - route.cumulative[i];
-      const s = segStart + (segLen * proj.t);
-
-      if (!best || proj.distanceSq < best.distanceSq) {
-        best = { s, distanceSq: proj.distanceSq };
-      }
-    }
-
-    return best;
-  }
-
-  function projectPointToSegment(p, a, b) {
-    const latScale = 111320;
-    const lngScale = 111320 * Math.cos(((a.lat + b.lat + p.lat) / 3) * Math.PI / 180);
-
-    const ax = a.lng * lngScale;
-    const ay = a.lat * latScale;
-    const bx = b.lng * lngScale;
-    const by = b.lat * latScale;
-    const px = p.lng * lngScale;
-    const py = p.lat * latScale;
-
-    const abx = bx - ax;
-    const aby = by - ay;
-    const apx = px - ax;
-    const apy = py - ay;
-    const lenSq = (abx * abx) + (aby * aby);
-    const rawT = lenSq > 0 ? ((apx * abx) + (apy * aby)) / lenSq : 0;
-    const t = clamp(rawT, 0, 1);
-
-    const cx = ax + (abx * t);
-    const cy = ay + (aby * t);
-    const dx = px - cx;
-    const dy = py - cy;
-
-    return { t, distanceSq: (dx * dx) + (dy * dy) };
-  }
-
-  function inferDirectionFromHeading(route, s, heading, fallbackDirection) {
-    const d = Math.min(8000, route.total * 0.02 + 1000);
-    const pNow = interpolateRoutePoint(route, s);
-    const pFwd = interpolateRoutePoint(route, clamp(s + d, 0, route.total));
-
-    const forwardBearing = bearingDegrees(pNow, pFwd);
-    const forwardDiff = angularDiffDeg(heading, forwardBearing);
-    const backwardDiff = angularDiffDeg(heading, (forwardBearing + 180) % 360);
-
-    if (forwardDiff === backwardDiff) return fallbackDirection || 1;
-    return forwardDiff < backwardDiff ? 1 : -1;
   }
 
   function normalizeHeading(value) {
     const h = Number(value) || 0;
     return ((h % 360) + 360) % 360;
-  }
-
-  function angularDiffDeg(a, b) {
-    const diff = Math.abs((a - b) % 360);
-    return diff > 180 ? 360 - diff : diff;
   }
 
   function projectLatLng(lat, lng, headingDeg, mph, seconds) {
@@ -575,29 +326,6 @@ const TrainsModule = (() => {
     return {
       lat: (nextLat * 180) / Math.PI,
       lng: (nextLng * 180) / Math.PI
-    };
-  }
-
-  function pointFromBearing(origin, headingDeg, meters) {
-    const heading = (headingDeg * Math.PI) / 180;
-    const R = 6378137;
-    const lat1 = (origin.lat * Math.PI) / 180;
-    const lng1 = (origin.lng * Math.PI) / 180;
-    const dByR = meters / R;
-
-    const lat2 = Math.asin(
-      Math.sin(lat1) * Math.cos(dByR) +
-      Math.cos(lat1) * Math.sin(dByR) * Math.cos(heading)
-    );
-
-    const lng2 = lng1 + Math.atan2(
-      Math.sin(heading) * Math.sin(dByR) * Math.cos(lat1),
-      Math.cos(dByR) - Math.sin(lat1) * Math.sin(lat2)
-    );
-
-    return {
-      lat: (lat2 * 180) / Math.PI,
-      lng: (lng2 * 180) / Math.PI,
     };
   }
 
@@ -628,41 +356,9 @@ const TrainsModule = (() => {
     return (brng + 360) % 360;
   }
 
-  function clamp(value, min, max) {
-    return Math.min(max, Math.max(min, value));
-  }
-
-  function tooltipContent(train) {
-    const delay = train.delayMinutes > 0
-      ? `<span style="color:#fb7185">+${train.delayMinutes}m late</span>`
-      : `<span style="color:#4ade80">On time</span>`;
-    return `<b>${train.routeName} #${train.trainNumber}</b><br>${train.speed} mph · ${delay}`;
-  }
-
-  function publishStats(trains) {
-    const activeCount = trains.length;
-    const delayedCount = trains.filter(train => train.delayMinutes > 5).length;
-    const onTimeCount = trains.filter(train => train.delayMinutes <= 5).length;
-    const onTimePct = activeCount > 0 ? Math.round((onTimeCount / activeCount) * 100) : 0;
-
-    try {
-      document.dispatchEvent(new CustomEvent('railyard:train-stats', {
-        detail: {
-          activeCount,
-          delayedCount,
-          onTimePct,
-          updatedAt: new Date().toISOString()
-        }
-      }));
-    } catch {
-      // Ignore HUD event failures.
-    }
-  }
-
-  async function init() {
+  function init() {
     layer = MapModule.getTrainLayer();
-    await ensureStationIndex();
-    await fetchAndUpdate();
+    fetchAndUpdate();
     pollTimer = setInterval(fetchAndUpdate, POLL_INTERVAL_MS);
     simTimer = setInterval(simulateMovement, SIM_TICK_MS);
   }
