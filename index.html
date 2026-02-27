@@ -54,6 +54,28 @@
             </div>
           </div>
 
+          <div class="map-hud" id="mapHud" aria-live="polite">
+            <div class="hud-title">Network Snapshot</div>
+            <div class="hud-grid">
+              <div class="hud-metric">
+                <span class="hud-label">Active</span>
+                <span class="hud-value" id="hudActive">--</span>
+              </div>
+              <div class="hud-metric">
+                <span class="hud-label">On Time</span>
+                <span class="hud-value" id="hudOnTime">--</span>
+              </div>
+              <div class="hud-metric">
+                <span class="hud-label">Delayed</span>
+                <span class="hud-value" id="hudDelayed">--</span>
+              </div>
+              <div class="hud-metric">
+                <span class="hud-label">Updated</span>
+                <span class="hud-value" id="hudUpdated">--</span>
+              </div>
+            </div>
+          </div>
+
           <!-- Log mode banner -->
           <div class="log-mode-banner" id="logModeBanner" hidden>
             📍 Log Mode Active — click anywhere on the map to record a sighting

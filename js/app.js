@@ -12,19 +12,22 @@
     // 2. Panel must be wired before train markers start firing clicks
     TrainPanelModule.init();
 
-    // 3. Train polling
+    // 3. Network HUD stats listener
+    initHud();
+
+    // 4. Train polling
     TrainsModule.init();
 
-    // 4. Spotter log (depends on MapModule for layer + map)
+    // 5. Spotter log (depends on MapModule for layer + map)
     SpotterLogModule.init();
 
-    // 5. Rail history widget (independent)
+    // 6. Rail history widget (independent)
     RailHistoryModule.init();
 
-    // 6. Tab navigation
+    // 7. Tab navigation
     initTabs();
 
-    // 7. Invalidate map size after tab switch
+    // 8. Invalidate map size after tab switch
     // (Leaflet needs to know its real dimensions)
     MapModule.getMap().invalidateSize();
   }
@@ -60,6 +63,30 @@
           });
         }
       });
+    });
+  }
+
+  function initHud() {
+    const activeEl = document.getElementById('hudActive');
+    const onTimeEl = document.getElementById('hudOnTime');
+    const delayedEl = document.getElementById('hudDelayed');
+    const updatedEl = document.getElementById('hudUpdated');
+    if (!activeEl || !onTimeEl || !delayedEl || !updatedEl) return;
+
+    document.addEventListener('railyard:train-stats', e => {
+      const stats = e.detail;
+      if (!stats) return;
+
+      activeEl.textContent = String(stats.activeCount ?? '--');
+      onTimeEl.textContent = `${stats.onTimePct ?? 0}%`;
+      delayedEl.textContent = String(stats.delayedCount ?? 0);
+
+      if (stats.updatedAt) {
+        updatedEl.textContent = new Date(stats.updatedAt).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      }
     });
   }
 

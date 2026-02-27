@@ -14,33 +14,36 @@ const TrainsModule = (() => {
   // ── Icon helpers ──────────────────────────────────────────────
 
   function speedColor(speed) {
-    if (speed >= 60) return '#22c55e';   // green
-    if (speed >= 20) return '#eab308';   // yellow
-    return '#ef4444';                     // red
+    if (speed >= 60) return '#4ade80';
+    if (speed >= 20) return '#facc15';
+    return '#fb7185';
   }
 
   function makeMovingIcon(heading, speed) {
     const color = speedColor(speed);
     const rot = heading || 0;
     return L.divIcon({
-      html: `<svg width="24" height="24" viewBox="0 0 24 24" style="transform:rotate(${rot}deg);display:block;">
-               <path d="M12 2 L20 20 L12 16 L4 20 Z" fill="${color}" stroke="white" stroke-width="1.5"/>
-             </svg>`,
-      iconSize: [24, 24],
-      iconAnchor: [12, 12],
-      className: '',
+      html: `<svg width="30" height="30" viewBox="0 0 30 30" style="transform:rotate(${rot}deg);display:block;filter:drop-shadow(0 0 6px rgba(255,178,44,0.45));">
+               <path d="M15 3 L26 22 L15 18 L4 22 Z" fill="${color}" stroke="#f8f2e4" stroke-width="1.2"/>
+               <rect x="11" y="13" width="8" height="4" rx="1" fill="#1c1508"/>
+               <circle cx="10" cy="22" r="1.5" fill="#ffd084"/>
+               <circle cx="20" cy="22" r="1.5" fill="#ffd084"/>
+              </svg>`,
+      iconSize: [30, 30],
+      iconAnchor: [15, 15],
+      className: 'train-marker-icon',
     });
   }
 
   function makeStoppedIcon() {
     return L.divIcon({
-      html: `<svg width="16" height="16" viewBox="0 0 16 16" style="display:block;">
-               <circle cx="8" cy="8" r="7" fill="#94a3b8" stroke="white" stroke-width="1.5"/>
-               <rect x="5" y="5" width="6" height="6" fill="white" rx="1"/>
-             </svg>`,
-      iconSize: [16, 16],
-      iconAnchor: [8, 8],
-      className: '',
+      html: `<svg width="24" height="24" viewBox="0 0 24 24" style="display:block;filter:drop-shadow(0 0 5px rgba(255,178,44,0.3));">
+               <circle cx="12" cy="12" r="9" fill="#2b241d" stroke="#ffd084" stroke-width="1.5"/>
+               <rect x="8" y="8" width="8" height="8" fill="#ffd084" rx="1"/>
+              </svg>`,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12],
+      className: 'train-marker-icon',
     });
   }
 
@@ -181,13 +184,31 @@ const TrainsModule = (() => {
         activeMarkers.delete(id);
       }
     }
+
+    publishStats(trains);
   }
 
   function tooltipContent(train) {
     const delay = train.delayMinutes > 0
-      ? `<span style="color:#ef4444">+${train.delayMinutes}m late</span>`
-      : `<span style="color:#22c55e">On time</span>`;
+      ? `<span style="color:#fb7185">+${train.delayMinutes}m late</span>`
+      : `<span style="color:#4ade80">On time</span>`;
     return `<b>${train.routeName} #${train.trainNumber}</b><br>${train.speed} mph · ${delay}`;
+  }
+
+  function publishStats(trains) {
+    const activeCount = trains.length;
+    const delayedCount = trains.filter(train => train.delayMinutes > 5).length;
+    const onTimeCount = trains.filter(train => train.delayMinutes <= 5).length;
+    const onTimePct = activeCount > 0 ? Math.round((onTimeCount / activeCount) * 100) : 0;
+
+    document.dispatchEvent(new CustomEvent('railyard:train-stats', {
+      detail: {
+        activeCount,
+        delayedCount,
+        onTimePct,
+        updatedAt: new Date().toISOString()
+      }
+    }));
   }
 
   // ── Public API ────────────────────────────────────────────────

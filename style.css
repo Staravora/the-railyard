@@ -1479,3 +1479,74 @@ body::before {
     padding: 18px;
   }
 }
+
+.map-hud {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 520;
+  width: 220px;
+  background: rgba(12, 11, 10, 0.88);
+  border: 1px solid rgba(255, 178, 44, 0.32);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(2px);
+  overflow: hidden;
+}
+
+.hud-title {
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ffe2a3;
+  padding: 9px 11px 7px;
+  border-bottom: 1px solid rgba(255, 178, 44, 0.2);
+}
+
+.hud-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.hud-metric {
+  padding: 8px 10px;
+  border-right: 1px solid rgba(255, 178, 44, 0.14);
+  border-bottom: 1px solid rgba(255, 178, 44, 0.14);
+}
+
+.hud-metric:nth-child(2n) {
+  border-right: none;
+}
+
+.hud-label {
+  display: block;
+  color: #ccb88f;
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hud-value {
+  display: block;
+  color: #fff1d1;
+  font-family: 'Oswald', sans-serif;
+  font-size: 20px;
+  line-height: 1.1;
+  margin-top: 2px;
+}
+
+.train-marker-icon {
+  background: transparent;
+}
+
+@media (max-width: 900px) {
+  .map-hud {
+    top: auto;
+    bottom: 16px;
+    right: 10px;
+    left: 10px;
+    width: auto;
+  }
+}

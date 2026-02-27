@@ -3,7 +3,24 @@
  */
 
 const RailHistoryModule = (() => {
-  const RAIL_REGEX = /railway|railroad|locomotive|train|rail(?:way)?|amtrak|transit|metro|subway|tram|monorail|funicular|maglev|steam engine|diesel|depot|station|signal|grade crossing/i;
+  const STRONG_RAIL_REGEX = /railway|railroad|locomotive|amtrak|intercity rail|high-speed rail|streetcar|tram|subway|metro|funicular|monorail|maglev|rail transport/i;
+  const SOFT_RAIL_REGEX = /train|station|depot|signal|switch|grade crossing|tunnel|rail line|commuter rail|passenger rail|freight rail|diesel|steam engine/i;
+  const EXCLUSION_REGEX = /music|song|album|film|television|football|baseball|basketball|video game/i;
+
+  const FALLBACK_EVENTS = [
+    {
+      year: 1825,
+      text: 'Stockton and Darlington Railway opens in England, widely regarded as the dawn of modern public railways.'
+    },
+    {
+      year: 1869,
+      text: 'Completion of the first U.S. transcontinental railroad links the Atlantic and Pacific rail networks.'
+    },
+    {
+      year: 1934,
+      text: 'Burlington Zephyr demonstrates streamlined diesel passenger service and reshapes rail design language.'
+    }
+  ];
 
   async function init() {
     const now = new Date();
@@ -22,20 +39,11 @@ const RailHistoryModule = (() => {
     try {
       const results = await fetchRailEvents(month, day);
 
-      if (results.length === 0) {
-        content.innerHTML = `<div class="history-empty">
-          🚂 No specific rail events found for today in Wikipedia.<br>
-          Check back tomorrow for more rail history!
-        </div>`;
-        return;
-      }
-
-      content.innerHTML = results.map(item => renderCard(item)).join('');
+      const displayItems = results.length > 0 ? results : FALLBACK_EVENTS;
+      content.innerHTML = displayItems.map(item => renderCard(item)).join('');
     } catch (err) {
       console.warn('[railHistory] fetch failed:', err);
-      content.innerHTML = `<div class="history-empty">
-        Could not load rail history. Please check your connection.
-      </div>`;
+      content.innerHTML = FALLBACK_EVENTS.map(item => renderCard(item)).join('');
     }
   }
 
@@ -54,26 +62,43 @@ const RailHistoryModule = (() => {
         const data = await res.json();
         const items = data[type] || [];
 
-        items.forEach(item => {
-          const text = item.text || '';
-          if (RAIL_REGEX.test(text)) {
+          items.forEach(item => {
+            const text = item.text || '';
+            const score = scoreRailRelevance(text);
+            if (score < 2) return;
+
             allItems.push({
               type,
               year: item.year,
               text,
               pages: item.pages || [],
+              score
             });
-          }
-        });
-      } catch {
-        // Ignore per-type failures
-      }
-    }));
+          });
+        } catch {
+          // Ignore per-type failures
+        }
+      }));
 
-    // Sort by year descending (most recent first)
-    allItems.sort((a, b) => b.year - a.year);
+    allItems.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return b.year - a.year;
+    });
 
-    return allItems;
+    return allItems.slice(0, 10);
+  }
+
+  function scoreRailRelevance(text) {
+    if (!text) return 0;
+    if (EXCLUSION_REGEX.test(text)) return 0;
+
+    let score = 0;
+    if (STRONG_RAIL_REGEX.test(text)) score += 3;
+
+    const softHits = text.match(new RegExp(SOFT_RAIL_REGEX.source, 'ig')) || [];
+    score += Math.min(softHits.length, 3);
+
+    return score;
   }
 
   function renderCard(item) {
@@ -87,7 +112,8 @@ const RailHistoryModule = (() => {
 
     // Find a thumbnail from the first Wikipedia page that has one
     let thumbHTML = '';
-    for (const page of item.pages) {
+    const pages = Array.isArray(item.pages) ? item.pages : [];
+    for (const page of pages) {
       const thumb = page.thumbnail;
       if (thumb && thumb.source) {
         thumbHTML = `<img class="history-card-thumb" src="${esc(thumb.source)}" alt="" loading="lazy" onerror="this.remove()"/>`;
