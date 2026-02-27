@@ -14,6 +14,7 @@ const TrainsModule = (() => {
   const BLEND_WINDOW_SEC = 8;
   const STALE_DATA_SEC = 90;
   const MAX_PREDICTION_HORIZON_SEC = 45;
+  const HIGH_ZOOM_LOCAL_MODE = 10;
 
   const activeMarkers = new Map();
   const routeCache = new Map();
@@ -277,6 +278,11 @@ const TrainsModule = (() => {
         correctionDelta: 0,
         correctionRemainingSec: 0,
         stalePolls: 0,
+        apiLat: train.lat,
+        apiLng: train.lng,
+        apiHeading: normalizeHeading(train.heading || 0),
+        apiVectorHeading: null,
+        apiVectorSpeedMph: Math.max(0, train.speed || 0),
       };
     }
 
@@ -294,10 +300,27 @@ const TrainsModule = (() => {
       correctionDelta: 0,
       correctionRemainingSec: 0,
       stalePolls: 0,
+      apiLat: train.lat,
+      apiLng: train.lng,
+      apiHeading: normalizeHeading(train.heading || 0),
+      apiVectorHeading: null,
+      apiVectorSpeedMph: Math.max(0, train.speed || 0),
     };
   }
 
   function reconcileSimulation(sim, train, nowMs) {
+    const prevApiPoint = { lat: sim.apiLat ?? train.lat, lng: sim.apiLng ?? train.lng };
+    const currApiPoint = { lat: train.lat, lng: train.lng };
+    const apiMoveMeters = haversineMeters(prevApiPoint, currApiPoint);
+    const apiMoveSec = Math.max(1, (nowMs - (sim.lastApiMs || nowMs)) / 1000);
+    if (apiMoveMeters >= 60) {
+      sim.apiVectorHeading = bearingDegrees(prevApiPoint, currApiPoint);
+      sim.apiVectorSpeedMph = (apiMoveMeters / apiMoveSec) * 2.236936;
+    }
+    sim.apiLat = train.lat;
+    sim.apiLng = train.lng;
+    sim.apiHeading = normalizeHeading(train.heading || sim.apiHeading || 0);
+
     sim.lastApiMs = nowMs;
 
     if (!train.route) {
@@ -368,6 +391,8 @@ const TrainsModule = (() => {
 
   function simulateMovement() {
     const nowMs = Date.now();
+    const map = typeof MapModule !== 'undefined' ? MapModule.getMap() : null;
+    const zoom = map ? map.getZoom() : 6;
 
     activeMarkers.forEach(entry => {
       const sim = entry.sim;
@@ -377,6 +402,29 @@ const TrainsModule = (() => {
       entry.lastTickMs = nowMs;
 
       if (sim.mode === 'route' && sim.route) {
+        if (zoom >= HIGH_ZOOM_LOCAL_MODE) {
+          const sinceApiSec = Math.max(0, (nowMs - sim.lastApiMs) / 1000);
+          const horizonSec = Math.min(25, (POLL_INTERVAL_MS / 1000) * 0.9);
+          const projectionSec = Math.min(sinceApiSec, horizonSec);
+
+          const heading = sim.apiVectorHeading != null ? sim.apiVectorHeading : sim.apiHeading;
+          const speedMph = sim.apiVectorHeading != null
+            ? ((sim.apiVectorSpeedMph * 0.65) + (sim.speedMph * 0.35))
+            : sim.speedMph;
+
+          const projected = projectLatLng(sim.apiLat, sim.apiLng, heading, speedMph, projectionSec);
+          const capMeters = Math.max(450, speedMph * 0.44704 * horizonSec);
+          const distFromFix = haversineMeters({ lat: sim.apiLat, lng: sim.apiLng }, projected);
+          const clamped = distFromFix > capMeters
+            ? pointFromBearing({ lat: sim.apiLat, lng: sim.apiLng }, heading, capMeters)
+            : projected;
+
+          sim.lat = clamped.lat;
+          sim.lng = clamped.lng;
+          entry.marker.setLatLng([clamped.lat, clamped.lng]);
+          return;
+        }
+
         const staleSec = (nowMs - sim.lastApiMs) / 1000;
         const staleFactor = staleSec <= STALE_DATA_SEC
           ? 1
@@ -522,6 +570,29 @@ const TrainsModule = (() => {
     return {
       lat: (nextLat * 180) / Math.PI,
       lng: (nextLng * 180) / Math.PI
+    };
+  }
+
+  function pointFromBearing(origin, headingDeg, meters) {
+    const heading = (headingDeg * Math.PI) / 180;
+    const R = 6378137;
+    const lat1 = (origin.lat * Math.PI) / 180;
+    const lng1 = (origin.lng * Math.PI) / 180;
+    const dByR = meters / R;
+
+    const lat2 = Math.asin(
+      Math.sin(lat1) * Math.cos(dByR) +
+      Math.cos(lat1) * Math.sin(dByR) * Math.cos(heading)
+    );
+
+    const lng2 = lng1 + Math.atan2(
+      Math.sin(heading) * Math.sin(dByR) * Math.cos(lat1),
+      Math.cos(dByR) - Math.sin(lat1) * Math.sin(lat2)
+    );
+
+    return {
+      lat: (lat2 * 180) / Math.PI,
+      lng: (lng2 * 180) / Math.PI,
     };
   }
 
