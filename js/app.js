@@ -99,7 +99,13 @@
         liveEl.classList.toggle('stale', stats.stale === true);
         liveEl.title = stats.stale ? 'Feed temporarily stale' : 'Feed live';
       }
+
+      renderProviderStatuses(stats.providerStatuses || []);
     });
+
+    if (typeof FeedRegistryModule !== 'undefined') {
+      renderProviderStatuses(FeedRegistryModule.getProviderStatuses());
+    }
   }
 
   function initLegendToggle() {
@@ -180,6 +186,30 @@
     } catch {
       return { total: 0, photoCount: 0, uniqueRailroads: 0, hasNight: false };
     }
+  }
+
+  function renderProviderStatuses(statuses) {
+    const list = document.getElementById('providerStatusList');
+    if (!list) return;
+
+    if (!Array.isArray(statuses) || statuses.length === 0) {
+      list.innerHTML = '<li class="provider-status-row">No providers configured.</li>';
+      return;
+    }
+
+    const sorted = [...statuses].sort((a, b) => {
+      if ((a.enabled ? 1 : 0) !== (b.enabled ? 1 : 0)) return (b.enabled ? 1 : 0) - (a.enabled ? 1 : 0);
+      return String(a.label).localeCompare(String(b.label));
+    });
+
+    list.innerHTML = sorted.map(status => {
+      const stateClass = !status.enabled ? 'off' : (status.ok ? 'ok' : 'warn');
+      const stateLabel = !status.enabled ? 'Disabled' : (status.ok ? 'Live' : 'Offline');
+      return `<li class="provider-status-row">
+        <span class="provider-name">${status.label}</span>
+        <span class="provider-pill ${stateClass}">${stateLabel}</span>
+      </li>`;
+    }).join('');
   }
 
   // ── Start ──────────────────────────────────────────────────────

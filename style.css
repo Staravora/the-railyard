@@ -1689,6 +1689,52 @@ body::before {
   color: #ffbf46;
 }
 
+.provider-status-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.provider-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.provider-name {
+  color: #e7d8ba;
+}
+
+.provider-pill {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.provider-pill.ok {
+  background: rgba(34, 197, 94, 0.2);
+  color: #9df7bf;
+  border-color: rgba(74, 222, 128, 0.35);
+}
+
+.provider-pill.warn {
+  background: rgba(251, 113, 133, 0.18);
+  color: #ffbdc8;
+  border-color: rgba(251, 113, 133, 0.35);
+}
+
+.provider-pill.off {
+  background: rgba(148, 163, 184, 0.15);
+  color: #c9d4df;
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
 .list-subtitle {
   color: #bda881;
   font-size: 12px;

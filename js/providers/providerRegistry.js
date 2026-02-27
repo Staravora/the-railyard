@@ -34,7 +34,10 @@ const FeedRegistryModule = (() => {
       registerProvider(AmtrakProvider);
     }
 
-    registerProvider(makePlaceholderProvider('uk-networkrail', 'Network Rail', 'UK'));
+    if (typeof UkNetworkRailProvider !== 'undefined') {
+      registerProvider(UkNetworkRailProvider);
+    }
+
     registerProvider(makePlaceholderProvider('de-db', 'Deutsche Bahn', 'DE'));
     registerProvider(makePlaceholderProvider('fi-vr', 'VR', 'FI'));
     registerProvider(makePlaceholderProvider('fr-sncf', 'SNCF', 'FR'));
