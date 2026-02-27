@@ -283,6 +283,7 @@ const TrainsModule = (() => {
         apiHeading: normalizeHeading(train.heading || 0),
         apiVectorHeading: null,
         apiVectorSpeedMph: Math.max(0, train.speed || 0),
+        apiVectorMs: 0,
       };
     }
 
@@ -305,6 +306,7 @@ const TrainsModule = (() => {
       apiHeading: normalizeHeading(train.heading || 0),
       apiVectorHeading: null,
       apiVectorSpeedMph: Math.max(0, train.speed || 0),
+      apiVectorMs: 0,
     };
   }
 
@@ -316,6 +318,7 @@ const TrainsModule = (() => {
     if (apiMoveMeters >= 60) {
       sim.apiVectorHeading = bearingDegrees(prevApiPoint, currApiPoint);
       sim.apiVectorSpeedMph = (apiMoveMeters / apiMoveSec) * 2.236936;
+      sim.apiVectorMs = nowMs;
     }
     sim.apiLat = train.lat;
     sim.apiLng = train.lng;
@@ -406,11 +409,13 @@ const TrainsModule = (() => {
           const sinceApiSec = Math.max(0, (nowMs - sim.lastApiMs) / 1000);
           const horizonSec = Math.min(25, (POLL_INTERVAL_MS / 1000) * 0.9);
           const projectionSec = Math.min(sinceApiSec, horizonSec);
+          const vectorAgeSec = sim.apiVectorMs > 0 ? (nowMs - sim.apiVectorMs) / 1000 : Infinity;
+          const hasReliableVector = sim.apiVectorHeading != null && vectorAgeSec <= ((POLL_INTERVAL_MS / 1000) * 2);
 
-          const heading = sim.apiVectorHeading != null ? sim.apiVectorHeading : sim.apiHeading;
-          const speedMph = sim.apiVectorHeading != null
+          const heading = hasReliableVector ? sim.apiVectorHeading : sim.apiHeading;
+          const speedMph = hasReliableVector
             ? ((sim.apiVectorSpeedMph * 0.65) + (sim.speedMph * 0.35))
-            : sim.speedMph;
+            : 0;
 
           const projected = projectLatLng(sim.apiLat, sim.apiLng, heading, speedMph, projectionSec);
           const capMeters = Math.max(450, speedMph * 0.44704 * horizonSec);
