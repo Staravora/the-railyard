@@ -7,6 +7,8 @@ const TrainsModule = (() => {
   const STATIONS_URL = 'https://api-v3.amtraker.com/v3/stations';
   const POLL_INTERVAL_MS = 30000;
   const SIM_TICK_MS = 1000;
+  const HIGH_ZOOM_LOCAL_MODE = 9;
+  const MAX_HEADING_EXTRAPOLATION_M = 350;
 
   // Map from train key → { marker, data }
   const activeMarkers = new Map();
@@ -206,7 +208,7 @@ const TrainsModule = (() => {
 
         const motion = computeMotionState(train, entry.motion);
         entry.motion = motion;
-        entry.marker.setLatLng([motion.lat, motion.lng]);
+        entry.marker.setLatLng([train.lat, train.lng]);
 
         // Update tooltip
         entry.marker.setTooltipContent(tooltipContent(train));
@@ -239,7 +241,7 @@ const TrainsModule = (() => {
 
         marker.addTo(layer);
         const motion = computeMotionState(train, null);
-        marker.setLatLng([motion.lat, motion.lng]);
+        marker.setLatLng([train.lat, train.lng]);
 
         activeMarkers.set(train.id, {
           marker,
@@ -263,6 +265,9 @@ const TrainsModule = (() => {
 
   function simulateMovement() {
     const nowMs = Date.now();
+    const map = typeof MapModule !== 'undefined' ? MapModule.getMap() : null;
+    const zoom = map ? map.getZoom() : 0;
+
     activeMarkers.forEach(entry => {
       const train = entry.data;
       if (!train || !entry.motion) return;
@@ -271,7 +276,7 @@ const TrainsModule = (() => {
       const dt = Math.max(0.2, Math.min(2, (nowMs - (entry.lastTickMs || nowMs)) / 1000));
       entry.lastTickMs = nowMs;
 
-      if (entry.motion.mode === 'route' && entry.motion.route) {
+      if (zoom < HIGH_ZOOM_LOCAL_MODE && entry.motion.mode === 'route' && entry.motion.route) {
         const meters = train.speed * 0.44704 * dt;
         const nextS = clamp(entry.motion.s + (meters * entry.motion.direction), 0, entry.motion.route.total);
         const nextPoint = interpolateRoutePoint(entry.motion.route, nextS);
@@ -283,6 +288,11 @@ const TrainsModule = (() => {
       }
 
       const current = entry.marker.getLatLng();
+      const realFix = entry.motion.realFix;
+      if (realFix && haversineMeters(current, realFix) >= MAX_HEADING_EXTRAPOLATION_M) {
+        return;
+      }
+
       const next = projectLatLng(current.lat, current.lng, train.heading || 0, train.speed, dt);
       entry.motion.lat = next.lat;
       entry.motion.lng = next.lng;
@@ -304,6 +314,7 @@ const TrainsModule = (() => {
           direction,
           lat: point.lat,
           lng: point.lng,
+          realFix: { lat: train.lat, lng: train.lng },
         };
       }
     }
@@ -315,6 +326,7 @@ const TrainsModule = (() => {
       direction: 1,
       lat: train.lat,
       lng: train.lng,
+      realFix: { lat: train.lat, lng: train.lng },
     };
   }
 
