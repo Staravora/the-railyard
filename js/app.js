@@ -77,6 +77,7 @@
     const onTimeEl = document.getElementById('hudOnTime');
     const delayedEl = document.getElementById('hudDelayed');
     const updatedEl = document.getElementById('hudUpdated');
+    const liveEl = document.getElementById('liveIndicator');
     if (!activeEl || !onTimeEl || !delayedEl || !updatedEl) return;
 
     document.addEventListener('railyard:train-stats', e => {
@@ -92,6 +93,11 @@
           hour: '2-digit',
           minute: '2-digit'
         });
+      }
+
+      if (liveEl) {
+        liveEl.classList.toggle('stale', stats.stale === true);
+        liveEl.title = stats.stale ? 'Feed temporarily stale' : 'Feed live';
       }
     });
   }

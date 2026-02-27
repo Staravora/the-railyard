@@ -1038,6 +1038,16 @@ body::before {
   background: rgba(9, 31, 16, 0.6);
 }
 
+.live-indicator.stale {
+  color: #ffd38c;
+  border-color: rgba(250, 204, 21, 0.4);
+  background: rgba(63, 45, 9, 0.55);
+}
+
+.live-indicator.stale .pulse-dot {
+  background: #facc15;
+}
+
 #map-container::before {
   content: '';
   position: absolute;

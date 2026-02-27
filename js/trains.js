@@ -1,22 +1,18 @@
 /**
- * trains.js — Stability-first live train motion engine.
+ * trains.js — Accuracy-first live train pins.
+ * Positions are updated only from API fixes (no in-between simulation).
  */
 
 const TrainsModule = (() => {
   const API_URL = 'https://api-v3.amtraker.com/v3/trains';
-  const POLL_INTERVAL_MS = 30000;
-  const SIM_TICK_MS = 1000;
+  const POLL_INTERVAL_MS = 10000;
+  const MIN_HEADING_MOVE_M = 25;
 
-  const MIN_OBS_MOVE_M = 45;
-  const MAX_PREDICT_SEC = 20;
-  const STALE_START_SEC = 10;
-  const STALE_STOP_SEC = 32;
-
-  const activeMarkers = new Map();
+  const activeMarkers = new Map(); // id -> { marker, data, heading }
   let pollTimer = null;
-  let simTimer = null;
   let layer = null;
   let map = null;
+  let lastSuccessfulPollMs = 0;
 
   function speedColor(speed) {
     if (speed >= 60) return '#4ade80';
@@ -42,6 +38,11 @@ const TrainsModule = (() => {
       iconAnchor: [12, 12],
       className: 'train-marker-icon',
     });
+  }
+
+  function normalizeHeading(value) {
+    const h = Number(value) || 0;
+    return ((h % 360) + 360) % 360;
   }
 
   function getStopName(stop) {
@@ -107,58 +108,6 @@ const TrainsModule = (() => {
     return trains;
   }
 
-  function createState(train, nowMs) {
-    return {
-      anchorLat: train.lat,
-      anchorLng: train.lng,
-      anchorMs: nowMs,
-      headingDeg: train.heading,
-      speedMps: Math.max(0, train.speed) * 0.44704,
-      lastObsLat: train.lat,
-      lastObsLng: train.lng,
-      lastObsMs: nowMs,
-      hasMeasuredVector: false,
-      stalePolls: 0,
-    };
-  }
-
-  function reconcileState(state, train, nowMs) {
-    const prevObs = { lat: state.lastObsLat, lng: state.lastObsLng };
-    const nextObs = { lat: train.lat, lng: train.lng };
-    const dtSec = Math.max(1, (nowMs - state.lastObsMs) / 1000);
-    const moveM = haversineMeters(prevObs, nextObs);
-
-    const feedMps = Math.max(0, train.speed) * 0.44704;
-
-    if (moveM >= MIN_OBS_MOVE_M) {
-      const measuredHeading = bearingDegrees(prevObs, nextObs);
-      const measuredMps = moveM / dtSec;
-      state.headingDeg = measuredHeading;
-      state.speedMps = (measuredMps * 0.75) + (feedMps * 0.25);
-      state.hasMeasuredVector = true;
-      state.stalePolls = 0;
-    } else if (feedMps <= 1.5) {
-      state.speedMps = 0;
-      state.hasMeasuredVector = false;
-      state.stalePolls += 1;
-    } else {
-      state.stalePolls += 1;
-      if (!state.hasMeasuredVector) {
-        state.speedMps = 0;
-      } else {
-        const damp = state.stalePolls >= 2 ? 0.35 : 0.6;
-        state.speedMps = Math.min(state.speedMps * damp, feedMps * damp);
-      }
-    }
-
-    state.anchorLat = train.lat;
-    state.anchorLng = train.lng;
-    state.anchorMs = nowMs;
-    state.lastObsLat = train.lat;
-    state.lastObsLng = train.lng;
-    state.lastObsMs = nowMs;
-  }
-
   async function fetchAndUpdate() {
     let raw;
     try {
@@ -167,10 +116,12 @@ const TrainsModule = (() => {
       raw = await res.json();
     } catch (err) {
       console.warn('[trains] fetch failed:', err.message);
+      publishStaleStats();
       return;
     }
 
     const nowMs = Date.now();
+    lastSuccessfulPollMs = nowMs;
     const trains = normalizeResponse(raw);
     const seenIds = new Set();
 
@@ -179,21 +130,21 @@ const TrainsModule = (() => {
 
       if (activeMarkers.has(train.id)) {
         const entry = activeMarkers.get(train.id);
+        const heading = deriveHeading(entry.data, train, entry.heading);
+        entry.heading = heading;
         entry.data = train;
-        reconcileState(entry.state, train, nowMs);
 
-        entry.marker.setIcon(train.speed <= 5 ? makeStoppedIcon() : makeMovingIcon(entry.state.headingDeg, train.speed));
+        entry.marker.setIcon(train.speed <= 5 ? makeStoppedIcon() : makeMovingIcon(heading, train.speed));
         entry.marker.setTooltipContent(tooltipContent(train));
         entry.marker.setLatLng([train.lat, train.lng]);
-        entry.lastTickMs = nowMs;
 
         if (typeof TrainPanelModule !== 'undefined') {
           TrainPanelModule.update(train);
         }
       } else {
-        const state = createState(train, nowMs);
+        const heading = train.heading;
         const marker = L.marker([train.lat, train.lng], {
-          icon: train.speed <= 5 ? makeStoppedIcon() : makeMovingIcon(state.headingDeg, train.speed)
+          icon: train.speed <= 5 ? makeStoppedIcon() : makeMovingIcon(heading, train.speed)
         });
 
         marker.bindTooltip(tooltipContent(train), {
@@ -214,8 +165,7 @@ const TrainsModule = (() => {
         activeMarkers.set(train.id, {
           marker,
           data: train,
-          state,
-          lastTickMs: nowMs,
+          heading,
         });
       }
     });
@@ -227,53 +177,26 @@ const TrainsModule = (() => {
       }
     }
 
-    publishStats(trains);
     applyDeclutter();
+    publishStats(trains, false);
   }
 
-  function simulateMovement() {
-    const nowMs = Date.now();
+  function deriveHeading(prevTrain, nextTrain, fallbackHeading) {
+    if (!prevTrain) return normalizeHeading(nextTrain.heading || fallbackHeading || 0);
 
-    activeMarkers.forEach(entry => {
-      const state = entry.state;
-      if (!state) return;
+    const movedMeters = haversineMeters(
+      { lat: prevTrain.lat, lng: prevTrain.lng },
+      { lat: nextTrain.lat, lng: nextTrain.lng }
+    );
 
-      const dtSec = Math.max(0.2, Math.min(2, (nowMs - (entry.lastTickMs || nowMs)) / 1000));
-      entry.lastTickMs = nowMs;
-
-      const obsAgeSec = Math.max(0, (nowMs - state.anchorMs) / 1000);
-      const ageHorizon = Math.min(MAX_PREDICT_SEC, (POLL_INTERVAL_MS / 1000) * 0.7);
-      const predictSec = Math.min(obsAgeSec, ageHorizon);
-
-      let speedMps = state.speedMps;
-      if (obsAgeSec > STALE_START_SEC) {
-        const t = Math.min(1, (obsAgeSec - STALE_START_SEC) / Math.max(1, STALE_STOP_SEC - STALE_START_SEC));
-        speedMps *= (1 - t);
-      }
-
-      if (speedMps <= 0.4) {
-        return;
-      }
-
-      const target = projectLatLng(
-        state.anchorLat,
-        state.anchorLng,
-        state.headingDeg,
-        speedMps / 0.44704,
-        predictSec
+    if (movedMeters >= MIN_HEADING_MOVE_M) {
+      return bearingDegrees(
+        { lat: prevTrain.lat, lng: prevTrain.lng },
+        { lat: nextTrain.lat, lng: nextTrain.lng }
       );
+    }
 
-      const current = entry.marker.getLatLng();
-      const alpha = 1 - Math.exp(-dtSec / 1.2);
-      const next = {
-        lat: current.lat + ((target.lat - current.lat) * alpha),
-        lng: current.lng + ((target.lng - current.lng) * alpha),
-      };
-
-      entry.marker.setLatLng([next.lat, next.lng]);
-    });
-
-    applyDeclutter();
+    return normalizeHeading(nextTrain.heading || fallbackHeading || 0);
   }
 
   function applyDeclutter() {
@@ -318,29 +241,6 @@ const TrainsModule = (() => {
     return `<b>${train.routeName} #${train.trainNumber}</b><br>${train.speed} mph · ${delay}`;
   }
 
-  function publishStats(trains) {
-    const activeCount = trains.length;
-    const delayedCount = trains.filter(train => train.delayMinutes > 5).length;
-    const onTimeCount = trains.filter(train => train.delayMinutes <= 5).length;
-    const onTimePct = activeCount > 0 ? Math.round((onTimeCount / activeCount) * 100) : 0;
-
-    const spotlight = pickSpotlightTrain(trains);
-
-    try {
-      document.dispatchEvent(new CustomEvent('railyard:train-stats', {
-        detail: {
-          activeCount,
-          delayedCount,
-          onTimePct,
-          updatedAt: new Date().toISOString(),
-          spotlight,
-        }
-      }));
-    } catch {
-      // Ignore HUD event failures.
-    }
-  }
-
   function pickSpotlightTrain(trains) {
     if (!trains.length) return null;
 
@@ -361,34 +261,31 @@ const TrainsModule = (() => {
     };
   }
 
-  function normalizeHeading(value) {
-    const h = Number(value) || 0;
-    return ((h % 360) + 360) % 360;
+  function publishStats(trains, stale) {
+    const activeCount = trains.length;
+    const delayedCount = trains.filter(train => train.delayMinutes > 5).length;
+    const onTimeCount = trains.filter(train => train.delayMinutes <= 5).length;
+    const onTimePct = activeCount > 0 ? Math.round((onTimeCount / activeCount) * 100) : 0;
+
+    try {
+      document.dispatchEvent(new CustomEvent('railyard:train-stats', {
+        detail: {
+          activeCount,
+          delayedCount,
+          onTimePct,
+          updatedAt: new Date(lastSuccessfulPollMs || Date.now()).toISOString(),
+          spotlight: pickSpotlightTrain(trains),
+          stale,
+        }
+      }));
+    } catch {
+      // Ignore HUD event failures.
+    }
   }
 
-  function projectLatLng(lat, lng, headingDeg, mph, seconds) {
-    const meters = mph * 0.44704 * seconds;
-    const heading = (headingDeg * Math.PI) / 180;
-    const R = 6378137;
-
-    const latRad = (lat * Math.PI) / 180;
-    const lngRad = (lng * Math.PI) / 180;
-    const dByR = meters / R;
-
-    const nextLat = Math.asin(
-      Math.sin(latRad) * Math.cos(dByR) +
-      Math.cos(latRad) * Math.sin(dByR) * Math.cos(heading)
-    );
-
-    const nextLng = lngRad + Math.atan2(
-      Math.sin(heading) * Math.sin(dByR) * Math.cos(latRad),
-      Math.cos(dByR) - Math.sin(latRad) * Math.sin(nextLat)
-    );
-
-    return {
-      lat: (nextLat * 180) / Math.PI,
-      lng: (nextLng * 180) / Math.PI
-    };
+  function publishStaleStats() {
+    const trains = [...activeMarkers.values()].map(entry => entry.data).filter(Boolean);
+    publishStats(trains, true);
   }
 
   function haversineMeters(a, b) {
@@ -421,16 +318,14 @@ const TrainsModule = (() => {
   function init() {
     layer = MapModule.getTrainLayer();
     map = MapModule.getMap();
+
     fetchAndUpdate();
     pollTimer = setInterval(fetchAndUpdate, POLL_INTERVAL_MS);
-    simTimer = setInterval(simulateMovement, SIM_TICK_MS);
-
     map.on('zoomend moveend', applyDeclutter);
   }
 
   function stop() {
     clearInterval(pollTimer);
-    clearInterval(simTimer);
   }
 
   function getMarkerData(trainId) {
