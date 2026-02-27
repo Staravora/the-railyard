@@ -90,6 +90,10 @@ const TrainPanelModule = (() => {
           <span class="panel-row-value">${esc(train.destination || '—')}</span>
         </div>
         <div class="panel-row">
+          <span class="panel-row-label">Source</span>
+          <span class="panel-row-value">${esc(train.providerLabel || train.provider || 'Unknown')}${train.country ? ` (${esc(train.country)})` : ''}</span>
+        </div>
+        <div class="panel-row">
           <span class="panel-row-label">Reported position</span>
           <span class="panel-row-value">${Number(train.lat).toFixed(3)}, ${Number(train.lng).toFixed(3)}</span>
         </div>

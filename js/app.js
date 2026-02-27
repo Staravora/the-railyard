@@ -132,7 +132,8 @@
       const delayText = spotlight.delayMinutes > 0
         ? `${spotlight.delayMinutes}m late`
         : (spotlight.delayMinutes < -1 ? `${Math.abs(spotlight.delayMinutes)}m early` : 'on time');
-      metaEl.textContent = `${spotlight.speed} mph • ${delayText}${spotlight.nextStop ? ` • Next: ${spotlight.nextStop}` : ''}`;
+      const source = spotlight.providerLabel ? `${spotlight.providerLabel}${spotlight.country ? ` ${spotlight.country}` : ''}` : null;
+      metaEl.textContent = `${spotlight.speed} mph • ${delayText}${spotlight.nextStop ? ` • Next: ${spotlight.nextStop}` : ''}${source ? ` • ${source}` : ''}`;
     });
 
     document.addEventListener('railyard:spotter-updated', e => {

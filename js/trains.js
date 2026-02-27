@@ -1,10 +1,8 @@
 /**
- * trains.js — Accuracy-first live train pins.
- * Positions are updated only from API fixes (no in-between simulation).
+ * trains.js — Accuracy-first live train pins using feed adapters.
  */
 
 const TrainsModule = (() => {
-  const API_URL = 'https://api-v3.amtraker.com/v3/trains';
   const POLL_INTERVAL_MS = 10000;
   const MIN_HEADING_MOVE_M = 25;
 
@@ -45,84 +43,19 @@ const TrainsModule = (() => {
     return ((h % 360) + 360) % 360;
   }
 
-  function getStopName(stop) {
-    return stop.stationName || stop.name || stop.code || '?';
-  }
-
-  function getStopArrISO(stop) {
-    return stop.arrDT || stop.arr || null;
-  }
-
-  function getStopSchArrISO(stop) {
-    return stop.schArrDT || stop.schArr || null;
-  }
-
-  function normalizeResponse(raw) {
-    const trains = [];
-
-    for (const [trainNum, runs] of Object.entries(raw)) {
-      if (!Array.isArray(runs)) continue;
-
-      runs.forEach((run, idx) => {
-        if (run.lat == null || run.lon == null) return;
-
-        const stops = Array.isArray(run.stations) ? run.stations : [];
-        const nextStop = stops.find(stop => {
-          const arr = getStopArrISO(stop);
-          return !arr || new Date(arr) > new Date();
-        });
-
-        let delayMinutes = 0;
-        const lastUpdated = stops.findLast ? stops.findLast(stop => getStopArrISO(stop)) : null;
-        const arrISO = lastUpdated ? getStopArrISO(lastUpdated) : null;
-        const schArrISO = lastUpdated ? getStopSchArrISO(lastUpdated) : null;
-        if (arrISO && schArrISO) {
-          delayMinutes = Math.round((new Date(arrISO) - new Date(schArrISO)) / 60000);
-        }
-        if (run.eventAr != null) {
-          delayMinutes = Math.round(run.eventAr);
-        }
-
-        const nextStopIdx = nextStop ? stops.indexOf(nextStop) : stops.length;
-        const progress = stops.length > 0 ? nextStopIdx / stops.length : 0;
-
-        trains.push({
-          id: run.trainID || `${trainNum}-${idx}`,
-          trainNumber: trainNum,
-          routeName: run.routeName || run.trainName || `Train ${trainNum}`,
-          lat: run.lat,
-          lng: run.lon,
-          speed: run.velocity != null ? Math.round(run.velocity) : 0,
-          heading: normalizeHeading(run.heading || 0),
-          delayMinutes,
-          nextStop: nextStop ? getStopName(nextStop) : null,
-          nextStopEta: nextStop ? (getStopArrISO(nextStop) || getStopSchArrISO(nextStop) || null) : null,
-          origin: stops.length > 0 ? getStopName(stops[0]) : null,
-          destination: stops.length > 0 ? getStopName(stops[stops.length - 1]) : null,
-          progress: Math.max(0, Math.min(1, progress)),
-          stops,
-        });
-      });
-    }
-
-    return trains;
-  }
-
   async function fetchAndUpdate() {
-    let raw;
-    try {
-      const res = await fetch(API_URL, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      raw = await res.json();
-    } catch (err) {
-      console.warn('[trains] fetch failed:', err.message);
-      publishStaleStats();
+    if (typeof FeedRegistryModule === 'undefined') {
+      console.warn('[trains] FeedRegistryModule missing');
       return;
     }
 
-    const nowMs = Date.now();
-    lastSuccessfulPollMs = nowMs;
-    const trains = normalizeResponse(raw);
+    const result = await FeedRegistryModule.fetchUnifiedTrains();
+    const trains = result.trains || [];
+
+    if (result.successCount > 0) {
+      lastSuccessfulPollMs = Date.now();
+    }
+
     const seenIds = new Set();
 
     trains.forEach(train => {
@@ -142,7 +75,7 @@ const TrainsModule = (() => {
           TrainPanelModule.update(train);
         }
       } else {
-        const heading = train.heading;
+        const heading = normalizeHeading(train.heading || 0);
         const marker = L.marker([train.lat, train.lng], {
           icon: train.speed <= 5 ? makeStoppedIcon() : makeMovingIcon(heading, train.speed)
         });
@@ -178,7 +111,7 @@ const TrainsModule = (() => {
     }
 
     applyDeclutter();
-    publishStats(trains, false);
+    publishStats(trains, result.successCount === 0, result.providerStatuses || []);
   }
 
   function deriveHeading(prevTrain, nextTrain, fallbackHeading) {
@@ -238,7 +171,8 @@ const TrainsModule = (() => {
     const delay = train.delayMinutes > 0
       ? `<span style="color:#fb7185">+${train.delayMinutes}m late</span>`
       : `<span style="color:#4ade80">On time</span>`;
-    return `<b>${train.routeName} #${train.trainNumber}</b><br>${train.speed} mph · ${delay}`;
+    const provider = train.providerLabel ? `${train.providerLabel} • ` : '';
+    return `<b>${provider}${train.routeName} #${train.trainNumber}</b><br>${train.speed} mph · ${delay}`;
   }
 
   function pickSpotlightTrain(trains) {
@@ -258,10 +192,12 @@ const TrainsModule = (() => {
       speed: t.speed,
       delayMinutes: t.delayMinutes,
       nextStop: t.nextStop,
+      providerLabel: t.providerLabel || t.provider || null,
+      country: t.country || null,
     };
   }
 
-  function publishStats(trains, stale) {
+  function publishStats(trains, stale, providerStatuses) {
     const activeCount = trains.length;
     const delayedCount = trains.filter(train => train.delayMinutes > 5).length;
     const onTimeCount = trains.filter(train => train.delayMinutes <= 5).length;
@@ -275,17 +211,13 @@ const TrainsModule = (() => {
           onTimePct,
           updatedAt: new Date(lastSuccessfulPollMs || Date.now()).toISOString(),
           spotlight: pickSpotlightTrain(trains),
+          providerStatuses,
           stale,
         }
       }));
     } catch {
       // Ignore HUD event failures.
     }
-  }
-
-  function publishStaleStats() {
-    const trains = [...activeMarkers.values()].map(entry => entry.data).filter(Boolean);
-    publishStats(trains, true);
   }
 
   function haversineMeters(a, b) {
@@ -318,6 +250,10 @@ const TrainsModule = (() => {
   function init() {
     layer = MapModule.getTrainLayer();
     map = MapModule.getMap();
+
+    if (typeof FeedRegistryModule !== 'undefined') {
+      FeedRegistryModule.init();
+    }
 
     fetchAndUpdate();
     pollTimer = setInterval(fetchAndUpdate, POLL_INTERVAL_MS);
