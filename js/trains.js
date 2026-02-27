@@ -4,6 +4,7 @@
 
 const TrainsModule = (() => {
   const API_URL = 'https://api-v3.amtraker.com/v3/trains';
+  const STATIONS_URL = 'https://api-v3.amtraker.com/v3/stations';
   const POLL_INTERVAL_MS = 30000;
   const SIM_TICK_MS = 1000;
 
@@ -12,6 +13,8 @@ const TrainsModule = (() => {
   let pollTimer = null;
   let simTimer = null;
   let layer = null;
+  let stationIndex = null;
+  let stationFetchStarted = false;
 
   // ── Icon helpers ──────────────────────────────────────────────
 
@@ -51,6 +54,60 @@ const TrainsModule = (() => {
 
   // ── Normalize API response ────────────────────────────────────
 
+  async function ensureStationIndex() {
+    if (stationIndex || stationFetchStarted) return;
+    stationFetchStarted = true;
+
+    try {
+      const res = await fetch(STATIONS_URL, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      stationIndex = data && typeof data === 'object' ? data : {};
+    } catch (err) {
+      console.warn('[trains] station index fetch failed:', err.message);
+      stationIndex = {};
+    }
+  }
+
+  function getStopCode(stop) {
+    return stop.code || stop.stationCode || null;
+  }
+
+  function getStopName(stop) {
+    return stop.stationName || stop.name || stop.code || '?';
+  }
+
+  function getStopArrISO(stop) {
+    return stop.arrDT || stop.arr || null;
+  }
+
+  function getStopSchArrISO(stop) {
+    return stop.schArrDT || stop.schArr || null;
+  }
+
+  function buildRoutePoints(stops) {
+    if (!Array.isArray(stops) || !stationIndex) return [];
+
+    const points = [];
+    let lastKey = '';
+
+    stops.forEach(stop => {
+      const code = getStopCode(stop);
+      if (!code) return;
+
+      const station = stationIndex[code];
+      if (!station || station.lat == null || station.lon == null) return;
+
+      const key = `${station.lat},${station.lon}`;
+      if (key === lastKey) return;
+      lastKey = key;
+
+      points.push({ lat: station.lat, lng: station.lon });
+    });
+
+    return points;
+  }
+
   /**
    * Amtraker v3 returns an object keyed by train number,
    * each value is an array of train runs (a train number can have
@@ -69,14 +126,19 @@ const TrainsModule = (() => {
         const stops = Array.isArray(run.stations) ? run.stations : [];
 
         // Find next stop (first not yet arrived)
-        const nextStop = stops.find(s => !s.arrDT || new Date(s.arrDT) > new Date());
+        const nextStop = stops.find(s => {
+          const arr = getStopArrISO(s);
+          return !arr || new Date(arr) > new Date();
+        });
 
         // Compute delay in minutes from last station
         let delayMinutes = 0;
-        const lastUpdated = stops.findLast ? stops.findLast(s => s.arrDT) : null;
-        if (lastUpdated && lastUpdated.arrDT && lastUpdated.schArrDT) {
+        const lastUpdated = stops.findLast ? stops.findLast(s => getStopArrISO(s)) : null;
+        const arrISO = lastUpdated ? getStopArrISO(lastUpdated) : null;
+        const schArrISO = lastUpdated ? getStopSchArrISO(lastUpdated) : null;
+        if (arrISO && schArrISO) {
           delayMinutes = Math.round(
-            (new Date(lastUpdated.arrDT) - new Date(lastUpdated.schArrDT)) / 60000
+            (new Date(arrISO) - new Date(schArrISO)) / 60000
           );
         }
         // Fall back to API-provided delay if available
@@ -88,6 +150,8 @@ const TrainsModule = (() => {
         const nextStopIdx = nextStop ? stops.indexOf(nextStop) : stops.length;
         const progress = stops.length > 0 ? nextStopIdx / stops.length : 0;
 
+        const routePoints = buildRoutePoints(stops);
+
         trains.push({
           id: run.trainID || `${trainNum}-${idx}`,
           trainNumber: trainNum,
@@ -97,12 +161,13 @@ const TrainsModule = (() => {
           speed: run.velocity != null ? Math.round(run.velocity) : 0,
           heading: run.heading || 0,
           delayMinutes,
-          nextStop: nextStop ? (nextStop.stationName || nextStop.code) : null,
-          nextStopEta: nextStop ? (nextStop.arrDT || nextStop.schArrDT || null) : null,
-          origin: stops.length > 0 ? (stops[0].stationName || stops[0].code) : null,
-          destination: stops.length > 0 ? (stops[stops.length - 1].stationName || stops[stops.length - 1].code) : null,
+          nextStop: nextStop ? getStopName(nextStop) : null,
+          nextStopEta: nextStop ? (getStopArrISO(nextStop) || getStopSchArrISO(nextStop) || null) : null,
+          origin: stops.length > 0 ? getStopName(stops[0]) : null,
+          destination: stops.length > 0 ? getStopName(stops[stops.length - 1]) : null,
           progress: Math.max(0, Math.min(1, progress)),
           stops,
+          routePoints,
         });
       });
     }
@@ -129,7 +194,7 @@ const TrainsModule = (() => {
     trains.forEach(train => {
       seenIds.add(train.id);
 
-        if (activeMarkers.has(train.id)) {
+      if (activeMarkers.has(train.id)) {
         // Update existing marker
         const entry = activeMarkers.get(train.id);
         const isStopped = train.speed <= 5;
@@ -139,26 +204,14 @@ const TrainsModule = (() => {
           isStopped ? makeStoppedIcon() : makeMovingIcon(train.heading, train.speed)
         );
 
-        // Slide to new position
-        if (typeof entry.marker.slideTo === 'function') {
-          try {
-            entry.marker.slideTo([train.lat, train.lng], { duration: 29000, keepAtCenter: false });
-          } catch {
-            entry.marker.setLatLng([train.lat, train.lng]);
-          }
-        } else {
-          entry.marker.setLatLng([train.lat, train.lng]);
-        }
+        const motion = computeMotionState(train, entry.motion);
+        entry.motion = motion;
+        entry.marker.setLatLng([motion.lat, motion.lng]);
 
         // Update tooltip
         entry.marker.setTooltipContent(tooltipContent(train));
         entry.data = train;
-        entry.lastReal = {
-          lat: train.lat,
-          lng: train.lng,
-          heading: train.heading || 0,
-          speed: train.speed || 0,
-        };
+        entry.lastTickMs = Date.now();
 
         // Update panel if this train is currently open
         if (typeof TrainPanelModule !== 'undefined') {
@@ -185,15 +238,14 @@ const TrainsModule = (() => {
         });
 
         marker.addTo(layer);
+        const motion = computeMotionState(train, null);
+        marker.setLatLng([motion.lat, motion.lng]);
+
         activeMarkers.set(train.id, {
           marker,
           data: train,
-          lastReal: {
-            lat: train.lat,
-            lng: train.lng,
-            heading: train.heading || 0,
-            speed: train.speed || 0,
-          }
+          motion,
+          lastTickMs: Date.now(),
         });
       }
     });
@@ -210,15 +262,170 @@ const TrainsModule = (() => {
   }
 
   function simulateMovement() {
+    const nowMs = Date.now();
     activeMarkers.forEach(entry => {
       const train = entry.data;
-      if (!train || !entry.lastReal) return;
+      if (!train || !entry.motion) return;
       if (train.speed <= 5) return;
 
+      const dt = Math.max(0.2, Math.min(2, (nowMs - (entry.lastTickMs || nowMs)) / 1000));
+      entry.lastTickMs = nowMs;
+
+      if (entry.motion.mode === 'route' && entry.motion.route) {
+        const meters = train.speed * 0.44704 * dt;
+        const nextS = clamp(entry.motion.s + (meters * entry.motion.direction), 0, entry.motion.route.total);
+        const nextPoint = interpolateRoutePoint(entry.motion.route, nextS);
+        entry.motion.s = nextS;
+        entry.motion.lat = nextPoint.lat;
+        entry.motion.lng = nextPoint.lng;
+        entry.marker.setLatLng([nextPoint.lat, nextPoint.lng]);
+        return;
+      }
+
       const current = entry.marker.getLatLng();
-      const next = projectLatLng(current.lat, current.lng, train.heading || 0, train.speed, SIM_TICK_MS / 1000);
+      const next = projectLatLng(current.lat, current.lng, train.heading || 0, train.speed, dt);
+      entry.motion.lat = next.lat;
+      entry.motion.lng = next.lng;
       entry.marker.setLatLng([next.lat, next.lng]);
     });
+  }
+
+  function computeMotionState(train, previousMotion) {
+    const route = buildRouteGeometry(train.routePoints || []);
+    if (route) {
+      const projected = projectOntoRoute(route, { lat: train.lat, lng: train.lng });
+      if (projected) {
+        const direction = pickRouteDirection(train.heading || 0, route, projected.s, previousMotion?.direction);
+        const point = interpolateRoutePoint(route, projected.s);
+        return {
+          mode: 'route',
+          route,
+          s: projected.s,
+          direction,
+          lat: point.lat,
+          lng: point.lng,
+        };
+      }
+    }
+
+    return {
+      mode: 'heading',
+      route: null,
+      s: 0,
+      direction: 1,
+      lat: train.lat,
+      lng: train.lng,
+    };
+  }
+
+  function buildRouteGeometry(points) {
+    if (!Array.isArray(points) || points.length < 2) return null;
+
+    const route = {
+      points,
+      cumulative: [0],
+      total: 0,
+    };
+
+    for (let i = 1; i < points.length; i += 1) {
+      route.total += haversineMeters(points[i - 1], points[i]);
+      route.cumulative.push(route.total);
+    }
+
+    return route.total > 0 ? route : null;
+  }
+
+  function interpolateRoutePoint(route, s) {
+    if (!route || !route.points.length) return null;
+    if (s <= 0) return route.points[0];
+    if (s >= route.total) return route.points[route.points.length - 1];
+
+    let segmentIdx = 0;
+    while (segmentIdx < route.cumulative.length - 1 && route.cumulative[segmentIdx + 1] < s) {
+      segmentIdx += 1;
+    }
+
+    const start = route.points[segmentIdx];
+    const end = route.points[segmentIdx + 1];
+    const segStart = route.cumulative[segmentIdx];
+    const segLen = route.cumulative[segmentIdx + 1] - segStart;
+    const t = segLen > 0 ? (s - segStart) / segLen : 0;
+
+    return {
+      lat: start.lat + ((end.lat - start.lat) * t),
+      lng: start.lng + ((end.lng - start.lng) * t),
+    };
+  }
+
+  function projectOntoRoute(route, point) {
+    if (!route || route.points.length < 2) return null;
+
+    let best = null;
+
+    for (let i = 0; i < route.points.length - 1; i += 1) {
+      const a = route.points[i];
+      const b = route.points[i + 1];
+      const proj = projectPointToSegment(point, a, b);
+      const segStart = route.cumulative[i];
+      const segLen = route.cumulative[i + 1] - route.cumulative[i];
+      const s = segStart + (segLen * proj.t);
+
+      if (!best || proj.distanceSq < best.distanceSq) {
+        best = {
+          s,
+          distanceSq: proj.distanceSq,
+        };
+      }
+    }
+
+    return best;
+  }
+
+  function projectPointToSegment(p, a, b) {
+    const latScale = 111320;
+    const lngScale = 111320 * Math.cos(((a.lat + b.lat + p.lat) / 3) * Math.PI / 180);
+
+    const ax = a.lng * lngScale;
+    const ay = a.lat * latScale;
+    const bx = b.lng * lngScale;
+    const by = b.lat * latScale;
+    const px = p.lng * lngScale;
+    const py = p.lat * latScale;
+
+    const abx = bx - ax;
+    const aby = by - ay;
+    const apx = px - ax;
+    const apy = py - ay;
+    const lenSq = (abx * abx) + (aby * aby);
+    const rawT = lenSq > 0 ? ((apx * abx) + (apy * aby)) / lenSq : 0;
+    const t = clamp(rawT, 0, 1);
+
+    const cx = ax + (abx * t);
+    const cy = ay + (aby * t);
+    const dx = px - cx;
+    const dy = py - cy;
+
+    return {
+      t,
+      distanceSq: (dx * dx) + (dy * dy),
+    };
+  }
+
+  function pickRouteDirection(heading, route, s, fallbackDirection) {
+    if (!route || route.total <= 0) return fallbackDirection || 1;
+
+    const d = Math.min(8000, route.total * 0.02 + 1000);
+    const pNow = interpolateRoutePoint(route, s);
+    const pFwd = interpolateRoutePoint(route, clamp(s + d, 0, route.total));
+
+    if (!pNow || !pFwd) return fallbackDirection || 1;
+
+    const forwardBearing = bearingDegrees(pNow, pFwd);
+    const forwardDiff = angularDiffDeg(heading, forwardBearing);
+    const backwardDiff = angularDiffDeg(heading, (forwardBearing + 180) % 360);
+
+    if (forwardDiff === backwardDiff && fallbackDirection) return fallbackDirection;
+    return forwardDiff <= backwardDiff ? 1 : -1;
   }
 
   function projectLatLng(lat, lng, headingDeg, mph, seconds) {
@@ -244,6 +451,42 @@ const TrainsModule = (() => {
       lat: (nextLat * 180) / Math.PI,
       lng: (nextLng * 180) / Math.PI
     };
+  }
+
+  function haversineMeters(a, b) {
+    const R = 6371000;
+    const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+    const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+    const lat1 = (a.lat * Math.PI) / 180;
+    const lat2 = (b.lat * Math.PI) / 180;
+
+    const sinLat = Math.sin(dLat / 2);
+    const sinLng = Math.sin(dLng / 2);
+    const h = (sinLat * sinLat) + (Math.cos(lat1) * Math.cos(lat2) * sinLng * sinLng);
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+
+  function bearingDegrees(a, b) {
+    const lat1 = (a.lat * Math.PI) / 180;
+    const lat2 = (b.lat * Math.PI) / 180;
+    const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x =
+      (Math.cos(lat1) * Math.sin(lat2)) -
+      (Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng));
+
+    const brng = (Math.atan2(y, x) * 180) / Math.PI;
+    return (brng + 360) % 360;
+  }
+
+  function angularDiffDeg(a, b) {
+    const diff = Math.abs((a - b) % 360);
+    return diff > 180 ? 360 - diff : diff;
+  }
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
   }
 
   function tooltipContent(train) {
@@ -277,6 +520,7 @@ const TrainsModule = (() => {
 
   function init() {
     layer = MapModule.getTrainLayer();
+    ensureStationIndex();
     fetchAndUpdate();
     pollTimer = setInterval(fetchAndUpdate, POLL_INTERVAL_MS);
     simTimer = setInterval(simulateMovement, SIM_TICK_MS);
