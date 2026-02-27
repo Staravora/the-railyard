@@ -5,10 +5,12 @@
 const TrainsModule = (() => {
   const API_URL = 'https://api-v3.amtraker.com/v3/trains';
   const POLL_INTERVAL_MS = 30000;
+  const SIM_TICK_MS = 1000;
 
   // Map from train key → { marker, data }
   const activeMarkers = new Map();
   let pollTimer = null;
+  let simTimer = null;
   let layer = null;
 
   // ── Icon helpers ──────────────────────────────────────────────
@@ -87,7 +89,7 @@ const TrainsModule = (() => {
         const progress = stops.length > 0 ? nextStopIdx / stops.length : 0;
 
         trains.push({
-          id: `${trainNum}-${idx}`,
+          id: run.trainID || `${trainNum}-${idx}`,
           trainNumber: trainNum,
           routeName: run.routeName || run.trainName || `Train ${trainNum}`,
           lat: run.lat,
@@ -127,7 +129,7 @@ const TrainsModule = (() => {
     trains.forEach(train => {
       seenIds.add(train.id);
 
-      if (activeMarkers.has(train.id)) {
+        if (activeMarkers.has(train.id)) {
         // Update existing marker
         const entry = activeMarkers.get(train.id);
         const isStopped = train.speed <= 5;
@@ -151,6 +153,12 @@ const TrainsModule = (() => {
         // Update tooltip
         entry.marker.setTooltipContent(tooltipContent(train));
         entry.data = train;
+        entry.lastReal = {
+          lat: train.lat,
+          lng: train.lng,
+          heading: train.heading || 0,
+          speed: train.speed || 0,
+        };
 
         // Update panel if this train is currently open
         if (typeof TrainPanelModule !== 'undefined') {
@@ -177,7 +185,16 @@ const TrainsModule = (() => {
         });
 
         marker.addTo(layer);
-        activeMarkers.set(train.id, { marker, data: train });
+        activeMarkers.set(train.id, {
+          marker,
+          data: train,
+          lastReal: {
+            lat: train.lat,
+            lng: train.lng,
+            heading: train.heading || 0,
+            speed: train.speed || 0,
+          }
+        });
       }
     });
 
@@ -190,6 +207,43 @@ const TrainsModule = (() => {
     }
 
     publishStats(trains);
+  }
+
+  function simulateMovement() {
+    activeMarkers.forEach(entry => {
+      const train = entry.data;
+      if (!train || !entry.lastReal) return;
+      if (train.speed <= 5) return;
+
+      const current = entry.marker.getLatLng();
+      const next = projectLatLng(current.lat, current.lng, train.heading || 0, train.speed, SIM_TICK_MS / 1000);
+      entry.marker.setLatLng([next.lat, next.lng]);
+    });
+  }
+
+  function projectLatLng(lat, lng, headingDeg, mph, seconds) {
+    const meters = mph * 0.44704 * seconds;
+    const heading = (headingDeg * Math.PI) / 180;
+    const R = 6378137;
+
+    const latRad = (lat * Math.PI) / 180;
+    const lngRad = (lng * Math.PI) / 180;
+    const dByR = meters / R;
+
+    const nextLat = Math.asin(
+      Math.sin(latRad) * Math.cos(dByR) +
+      Math.cos(latRad) * Math.sin(dByR) * Math.cos(heading)
+    );
+
+    const nextLng = lngRad + Math.atan2(
+      Math.sin(heading) * Math.sin(dByR) * Math.cos(latRad),
+      Math.cos(dByR) - Math.sin(latRad) * Math.sin(nextLat)
+    );
+
+    return {
+      lat: (nextLat * 180) / Math.PI,
+      lng: (nextLng * 180) / Math.PI
+    };
   }
 
   function tooltipContent(train) {
@@ -225,10 +279,12 @@ const TrainsModule = (() => {
     layer = MapModule.getTrainLayer();
     fetchAndUpdate();
     pollTimer = setInterval(fetchAndUpdate, POLL_INTERVAL_MS);
+    simTimer = setInterval(simulateMovement, SIM_TICK_MS);
   }
 
   function stop() {
     clearInterval(pollTimer);
+    clearInterval(simTimer);
   }
 
   function getMarkerData(trainId) {
