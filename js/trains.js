@@ -7,6 +7,8 @@ const TrainsModule = (() => {
   const POLL_INTERVAL_MS = 30000;
   const SIM_TICK_MS = 1000;
   const SMOOTH_TIME_SEC = 1.6;
+  const MIN_VECTOR_MOVE_M = 60;
+  const MAX_PREDICT_HORIZON_SEC = 15;
 
   const activeMarkers = new Map();
   let pollTimer = null;
@@ -179,6 +181,10 @@ const TrainsModule = (() => {
       apiMs: nowMs,
       heading: train.heading || 0,
       speed: Math.max(0, train.speed || 0),
+      hasTrackVector: false,
+      trackHeading: train.heading || 0,
+      trackSpeed: Math.max(0, train.speed || 0),
+      stalePolls: 0,
     };
   }
 
@@ -187,12 +193,21 @@ const TrainsModule = (() => {
     const next = { lat: train.lat, lng: train.lng };
 
     const movedMeters = haversineMeters(prev, next);
-    const inferredHeading = movedMeters > 35 ? bearingDegrees(prev, next) : motion.heading;
+    const deltaSec = Math.max(1, (nowMs - motion.apiMs) / 1000);
+
+    if (movedMeters >= MIN_VECTOR_MOVE_M) {
+      motion.hasTrackVector = true;
+      motion.trackHeading = bearingDegrees(prev, next);
+      motion.trackSpeed = (movedMeters / deltaSec) * 2.236936;
+      motion.stalePolls = 0;
+    } else {
+      motion.stalePolls += 1;
+    }
 
     motion.apiLat = train.lat;
     motion.apiLng = train.lng;
     motion.apiMs = nowMs;
-    motion.heading = normalizeHeading(train.heading || inferredHeading || 0);
+    motion.heading = normalizeHeading(train.heading || motion.heading || 0);
     motion.speed = Math.max(0, train.speed || 0);
   }
 
@@ -210,14 +225,28 @@ const TrainsModule = (() => {
       entry.lastTickMs = nowMs;
 
       const sinceApiSec = Math.max(0, (nowMs - motion.apiMs) / 1000);
-      const horizonSec = (POLL_INTERVAL_MS / 1000) * 1.25;
+      const horizonSec = Math.min(MAX_PREDICT_HORIZON_SEC, (POLL_INTERVAL_MS / 1000) * 0.5);
       const projectionSec = Math.min(sinceApiSec, horizonSec);
 
-      const projected = projectLatLng(motion.apiLat, motion.apiLng, motion.heading, motion.speed, projectionSec);
-      const driftCap = getDriftCapMeters(zoom, motion.speed, horizonSec);
+      let heading = motion.heading;
+      let speedMph = motion.speed;
+
+      if (motion.hasTrackVector) {
+        heading = motion.trackHeading;
+        speedMph = (motion.trackSpeed * 0.65) + (motion.speed * 0.35);
+      } else {
+        speedMph = 0;
+      }
+
+      if (motion.stalePolls >= 2) {
+        speedMph = Math.min(speedMph, 8);
+      }
+
+      const projected = projectLatLng(motion.apiLat, motion.apiLng, heading, speedMph, projectionSec);
+      const driftCap = getDriftCapMeters(zoom, speedMph, horizonSec);
       const distFromFix = haversineMeters({ lat: motion.apiLat, lng: motion.apiLng }, projected);
       const target = distFromFix > driftCap
-        ? pointFromBearing({ lat: motion.apiLat, lng: motion.apiLng }, motion.heading, driftCap)
+        ? pointFromBearing({ lat: motion.apiLat, lng: motion.apiLng }, heading, driftCap)
         : projected;
 
       const current = entry.marker.getLatLng();
