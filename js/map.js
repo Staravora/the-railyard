@@ -50,6 +50,15 @@ const MapModule = (() => {
       });
     }
 
+    const opacityInput = document.getElementById('railOverlayOpacity');
+    if (opacityInput) {
+      opacityInput.addEventListener('input', () => {
+        const value = Number(opacityInput.value);
+        const opacity = Number.isFinite(value) ? Math.max(0.2, Math.min(1, value / 100)) : 0.94;
+        railOverlay.setOpacity(opacity);
+      });
+    }
+
     return map;
   }
 

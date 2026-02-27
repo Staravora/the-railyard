@@ -10,15 +10,21 @@ const RailHistoryModule = (() => {
   const FALLBACK_EVENTS = [
     {
       year: 1825,
-      text: 'Stockton and Darlington Railway opens in England, widely regarded as the dawn of modern public railways.'
+      text: 'Stockton and Darlington Railway opens in England, widely regarded as the dawn of modern public railways.',
+      sourceTitle: 'Stockton and Darlington Railway',
+      sourceUrl: 'https://en.wikipedia.org/wiki/Stockton_and_Darlington_Railway'
     },
     {
       year: 1869,
-      text: 'Completion of the first U.S. transcontinental railroad links the Atlantic and Pacific rail networks.'
+      text: 'Completion of the first U.S. transcontinental railroad links the Atlantic and Pacific rail networks.',
+      sourceTitle: 'First transcontinental railroad',
+      sourceUrl: 'https://en.wikipedia.org/wiki/First_transcontinental_railroad'
     },
     {
       year: 1934,
-      text: 'Burlington Zephyr demonstrates streamlined diesel passenger service and reshapes rail design language.'
+      text: 'Burlington Zephyr demonstrates streamlined diesel passenger service and reshapes rail design language.',
+      sourceTitle: 'Pioneer Zephyr',
+      sourceUrl: 'https://en.wikipedia.org/wiki/Pioneer_Zephyr'
     }
   ];
 
@@ -85,7 +91,15 @@ const RailHistoryModule = (() => {
       return b.year - a.year;
     });
 
-    return allItems.slice(0, 10);
+    const seen = new Set();
+    const uniqueItems = allItems.filter(item => {
+      const key = `${item.year}:${item.text.slice(0, 64).toLowerCase()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    return uniqueItems.slice(0, 8);
   }
 
   function scoreRailRelevance(text) {
@@ -127,12 +141,30 @@ const RailHistoryModule = (() => {
       .replace(/'''/g, '')
       .replace(/''/g, '');
 
+    const source = pickSource(item);
+
     return `<div class="history-card">
       <span class="history-card-type ${typeClass}">${typeLabel}</span>
       <div class="history-card-year">${item.year}</div>
       <div class="history-card-text">${esc(cleanText)}</div>
+      ${source ? `<a class="history-source" href="${esc(source.url)}" target="_blank" rel="noreferrer">Source: ${esc(source.title)}</a>` : ''}
       ${thumbHTML}
     </div>`;
+  }
+
+  function pickSource(item) {
+    if (item.sourceTitle && item.sourceUrl) {
+      return { title: item.sourceTitle, url: item.sourceUrl };
+    }
+
+    const pages = Array.isArray(item.pages) ? item.pages : [];
+    const first = pages.find(page => page && page.content_urls && page.content_urls.desktop && page.content_urls.desktop.page);
+    if (!first) return null;
+
+    return {
+      title: first.normalizedtitle || first.title || 'Wikipedia',
+      url: first.content_urls.desktop.page,
+    };
   }
 
   function esc(str) {

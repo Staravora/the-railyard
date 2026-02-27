@@ -17,6 +17,8 @@ const TrainPanelModule = (() => {
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') close();
     });
+
+    bodyEl.addEventListener('click', onPanelActionClick);
   }
 
   // ── Open / Close ─────────────────────────────────────────────
@@ -42,6 +44,7 @@ const TrainPanelModule = (() => {
   function render(train) {
     const delayBadge = delayBadgeHTML(train.delayMinutes);
     const speedBadge = `<span class="badge badge-speed">⚡ ${train.speed} mph</span>`;
+    const statusChip = statusChipHTML(train);
 
     const nextStopHTML = train.nextStop
       ? `<div class="panel-row">
@@ -56,18 +59,27 @@ const TrainPanelModule = (() => {
 
     const progressHTML = renderProgress(train);
     const stopsHTML = renderStops(train);
+    const detailPayload = `${train.routeName} #${train.trainNumber} | ${train.speed} mph | ${train.nextStop || 'No next stop'} | ${train.delayMinutes > 0 ? `${train.delayMinutes}m late` : 'On time'}`;
 
     bodyEl.innerHTML = `
-      <div class="panel-route-name">${esc(train.routeName)}</div>
-      <div class="panel-train-number">Train #${esc(train.trainNumber)}</div>
+      <div class="panel-header-block">
+        <div class="panel-route-name">${esc(train.routeName)}</div>
+        <div class="panel-train-number">Train #${esc(train.trainNumber)}</div>
+        <div class="panel-status-chip">${statusChip}</div>
+      </div>
 
       <div class="panel-badges">
         ${speedBadge}
         ${delayBadge}
       </div>
 
+      <div class="panel-actions">
+        <button class="btn-secondary panel-action-btn" data-action="focus-train">Focus on map</button>
+        <button class="btn-secondary panel-action-btn" data-action="copy-details" data-payload="${esc(detailPayload)}">Copy details</button>
+      </div>
+
       <div class="panel-section">
-        <div class="panel-section-title">Status</div>
+        <div class="panel-section-title">Live Status</div>
         ${nextStopHTML}
         <div class="panel-row">
           <span class="panel-row-label">Origin</span>
@@ -77,11 +89,44 @@ const TrainPanelModule = (() => {
           <span class="panel-row-label">Destination</span>
           <span class="panel-row-value">${esc(train.destination || '—')}</span>
         </div>
+        <div class="panel-row">
+          <span class="panel-row-label">Reported position</span>
+          <span class="panel-row-value">${Number(train.lat).toFixed(3)}, ${Number(train.lng).toFixed(3)}</span>
+        </div>
       </div>
 
       ${progressHTML}
       ${stopsHTML}
     `;
+  }
+
+  function statusChipHTML(train) {
+    if (train.delayMinutes > 15) return '<span class="panel-chip late">Significant Delay</span>';
+    if (train.delayMinutes > 5) return '<span class="panel-chip caution">Running Behind</span>';
+    if (train.delayMinutes < -1) return '<span class="panel-chip good">Ahead of Schedule</span>';
+    return '<span class="panel-chip good">On Schedule</span>';
+  }
+
+  function onPanelActionClick(e) {
+    const btn = e.target.closest('.panel-action-btn');
+    if (!btn) return;
+
+    const action = btn.dataset.action;
+    if (action === 'focus-train') {
+      const train = typeof TrainsModule !== 'undefined' ? TrainsModule.getMarkerData(currentTrainId) : null;
+      if (train && typeof MapModule !== 'undefined') {
+        MapModule.getMap().setView([train.lat, train.lng], Math.max(MapModule.getMap().getZoom(), 8), { animate: true });
+      }
+      return;
+    }
+
+    if (action === 'copy-details') {
+      const payload = btn.dataset.payload || '';
+      if (!payload) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(payload).catch(() => {});
+      }
+    }
   }
 
   function delayBadgeHTML(minutes) {

@@ -16,6 +16,7 @@ const TrainsModule = (() => {
   let pollTimer = null;
   let simTimer = null;
   let layer = null;
+  let map = null;
 
   function speedColor(speed) {
     if (speed >= 60) return '#4ade80';
@@ -227,6 +228,7 @@ const TrainsModule = (() => {
     }
 
     publishStats(trains);
+    applyDeclutter();
   }
 
   function simulateMovement() {
@@ -270,6 +272,43 @@ const TrainsModule = (() => {
 
       entry.marker.setLatLng([next.lat, next.lng]);
     });
+
+    applyDeclutter();
+  }
+
+  function applyDeclutter() {
+    if (!map) return;
+
+    const zoom = map.getZoom();
+    if (zoom >= 7) {
+      activeMarkers.forEach(entry => entry.marker.setOpacity(1));
+      return;
+    }
+
+    const bounds = map.getBounds();
+    const cellDeg = zoom <= 4 ? 4 : (zoom <= 5 ? 2.5 : 1.6);
+    const keepByCell = new Map();
+
+    activeMarkers.forEach(entry => {
+      const ll = entry.marker.getLatLng();
+      if (!bounds.pad(0.3).contains(ll)) {
+        entry.marker.setOpacity(0);
+        return;
+      }
+
+      const x = Math.floor((ll.lng + 180) / cellDeg);
+      const y = Math.floor((ll.lat + 90) / cellDeg);
+      const key = `${x}:${y}`;
+
+      if (!keepByCell.has(key) || (entry.data.speed || 0) > (keepByCell.get(key).data.speed || 0)) {
+        keepByCell.set(key, entry);
+      }
+    });
+
+    const keepSet = new Set(keepByCell.values());
+    activeMarkers.forEach(entry => {
+      entry.marker.setOpacity(keepSet.has(entry) ? 1 : 0.15);
+    });
   }
 
   function tooltipContent(train) {
@@ -285,18 +324,41 @@ const TrainsModule = (() => {
     const onTimeCount = trains.filter(train => train.delayMinutes <= 5).length;
     const onTimePct = activeCount > 0 ? Math.round((onTimeCount / activeCount) * 100) : 0;
 
+    const spotlight = pickSpotlightTrain(trains);
+
     try {
       document.dispatchEvent(new CustomEvent('railyard:train-stats', {
         detail: {
           activeCount,
           delayedCount,
           onTimePct,
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
+          spotlight,
         }
       }));
     } catch {
       // Ignore HUD event failures.
     }
+  }
+
+  function pickSpotlightTrain(trains) {
+    if (!trains.length) return null;
+
+    const ranked = [...trains].sort((a, b) => {
+      const scoreA = (a.speed || 0) + ((a.delayMinutes > 0 ? a.delayMinutes : 0) * 0.8);
+      const scoreB = (b.speed || 0) + ((b.delayMinutes > 0 ? b.delayMinutes : 0) * 0.8);
+      return scoreB - scoreA;
+    });
+
+    const t = ranked[0];
+    return {
+      id: t.id,
+      routeName: t.routeName,
+      trainNumber: t.trainNumber,
+      speed: t.speed,
+      delayMinutes: t.delayMinutes,
+      nextStop: t.nextStop,
+    };
   }
 
   function normalizeHeading(value) {
@@ -358,9 +420,12 @@ const TrainsModule = (() => {
 
   function init() {
     layer = MapModule.getTrainLayer();
+    map = MapModule.getMap();
     fetchAndUpdate();
     pollTimer = setInterval(fetchAndUpdate, POLL_INTERVAL_MS);
     simTimer = setInterval(simulateMovement, SIM_TICK_MS);
+
+    map.on('zoomend moveend', applyDeclutter);
   }
 
   function stop() {

@@ -46,12 +46,26 @@
             <button class="toolbar-btn" id="logModeBtn" title="Toggle log mode — click map to add spotter entry">
               📍 Log Mode
             </button>
+            <button class="toolbar-btn" id="legendToggleBtn" title="Toggle train legend">
+              🧭 Legend
+            </button>
             <div class="layer-toggle">
               <label class="toggle-label">
                 <input type="checkbox" id="railOverlayToggle" checked />
                 Rail overlay
               </label>
+              <label class="toggle-label overlay-opacity">
+                Opacity
+                <input type="range" id="railOverlayOpacity" min="20" max="100" value="94" />
+              </label>
             </div>
+          </div>
+
+          <div class="map-legend" id="mapLegend" hidden>
+            <div class="legend-title">Train Speed</div>
+            <div class="legend-item"><span class="legend-swatch fast"></span> Fast (60+ mph)</div>
+            <div class="legend-item"><span class="legend-swatch medium"></span> Moderate (20-59 mph)</div>
+            <div class="legend-item"><span class="legend-swatch slow"></span> Slow / stopped</div>
           </div>
 
           <div class="map-hud" id="mapHud" aria-live="polite">
@@ -87,6 +101,20 @@
         <aside class="history-sidebar">
           <h2 class="sidebar-title">This Day in Rail</h2>
           <p class="history-date" id="historyDate"></p>
+          <section class="feature-card" id="routeSpotlightCard">
+            <h3>Route Spotlight</h3>
+            <p class="feature-main" id="spotlightRoute">Waiting for live trains…</p>
+            <p class="feature-meta" id="spotlightMeta">The most active service updates here automatically.</p>
+          </section>
+          <section class="feature-card" id="railfanChecklistCard">
+            <h3>Railfan Checklist</h3>
+            <ul class="checklist" id="railfanChecklist">
+              <li>Log 1 sighting</li>
+              <li>Add a photo</li>
+              <li>Log 3 different railroads</li>
+              <li>Record a nighttime sighting</li>
+            </ul>
+          </section>
           <div id="railHistoryContent" class="history-cards">
             <div class="history-loading">Loading rail history…</div>
           </div>
@@ -115,6 +143,10 @@
               <label for="spotDate">Date</label>
               <input type="date" id="spotDate" />
             </div>
+            <div class="form-row">
+              <label for="spotTime">Time</label>
+              <input type="time" id="spotTime" />
+            </div>
             <div class="form-row coords-row">
               <label>Location</label>
               <div class="coord-inputs">
@@ -122,6 +154,10 @@
                 <input type="number" id="spotLng" placeholder="Lng" step="any" />
               </div>
               <span class="coord-hint" id="coordHint"></span>
+            </div>
+            <div class="form-row">
+              <label for="spotPhoto">Photo</label>
+              <input type="file" id="spotPhoto" accept="image/*" />
             </div>
             <div class="form-row">
               <label for="spotNotes">Notes</label>
@@ -140,9 +176,15 @@
             <h2>My Sightings</h2>
             <div class="list-controls">
               <input type="search" id="spotterSearch" placeholder="Search entries…" />
+              <select id="spotterPhotoFilter" title="Filter by photo">
+                <option value="all">All entries</option>
+                <option value="with-photo">With photo</option>
+                <option value="no-photo">No photo</option>
+              </select>
               <button class="btn-secondary" id="exportBtn">⬇ Export JSON</button>
             </div>
           </div>
+          <p class="list-subtitle" id="spotterSummary">0 sightings logged</p>
           <div id="spotterList" class="spotter-list">
             <p class="empty-state">No sightings logged yet. Add your first entry!</p>
           </div>
@@ -180,8 +222,16 @@
           <input type="date" id="mDate" />
         </div>
         <div class="form-row">
+          <label for="mTime">Time</label>
+          <input type="time" id="mTime" />
+        </div>
+        <div class="form-row">
           <label>Location</label>
           <p class="modal-location" id="modalLocation"></p>
+        </div>
+        <div class="form-row">
+          <label for="mPhoto">Photo</label>
+          <input type="file" id="mPhoto" accept="image/*" />
         </div>
         <div class="form-row">
           <label for="mNotes">Notes</label>

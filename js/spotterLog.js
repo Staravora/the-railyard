@@ -44,6 +44,10 @@ const SpotterLogModule = (() => {
       renderList(e.target.value.trim().toLowerCase());
     });
 
+    document.getElementById('spotterPhotoFilter').addEventListener('change', () => {
+      renderList(document.getElementById('spotterSearch').value.trim().toLowerCase());
+    });
+
     // Export
     document.getElementById('exportBtn').addEventListener('click', exportJSON);
 
@@ -52,11 +56,15 @@ const SpotterLogModule = (() => {
 
     // Set today's date as default
     const today = new Date().toISOString().slice(0, 10);
+    const nowTime = currentTimeHHMM();
     document.getElementById('spotDate').value = today;
     document.getElementById('mDate').value = today;
+    document.getElementById('spotTime').value = nowTime;
+    document.getElementById('mTime').value = nowTime;
 
     renderList();
     renderMapPins();
+    publishChecklistData();
   }
 
   // ── Log Mode ─────────────────────────────────────────────────
@@ -120,20 +128,25 @@ const SpotterLogModule = (() => {
     pendingCoords = null;
     // Reset date
     document.getElementById('mDate').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('mTime').value = currentTimeHHMM();
   }
 
-  function submitModalForm() {
+  async function submitModalForm() {
     if (!pendingCoords) return;
+
+    const photoDataUrl = await readPhoto('mPhoto');
 
     const entry = {
       id: crypto.randomUUID(),
       date: document.getElementById('mDate').value,
+      time: document.getElementById('mTime').value,
       lat: parseFloat(pendingCoords.lat),
       lng: parseFloat(pendingCoords.lng),
       displayName: pendingCoords.displayName || `${pendingCoords.lat}, ${pendingCoords.lng}`,
       locomotiveNumber: document.getElementById('mLocoNumber').value.trim(),
       railroad: document.getElementById('mRailroad').value.trim(),
       notes: document.getElementById('mNotes').value.trim(),
+      photoDataUrl,
       createdAt: new Date().toISOString(),
     };
 
@@ -143,19 +156,22 @@ const SpotterLogModule = (() => {
 
   // ── Tab Form ─────────────────────────────────────────────────
 
-  function submitTabForm() {
+  async function submitTabForm() {
     const lat = parseFloat(document.getElementById('spotLat').value);
     const lng = parseFloat(document.getElementById('spotLng').value);
+    const photoDataUrl = await readPhoto('spotPhoto');
 
     const entry = {
       id: crypto.randomUUID(),
       date: document.getElementById('spotDate').value,
+      time: document.getElementById('spotTime').value,
       lat: isNaN(lat) ? null : lat,
       lng: isNaN(lng) ? null : lng,
       displayName: null,
       locomotiveNumber: document.getElementById('locoNumber').value.trim(),
       railroad: document.getElementById('railroad').value.trim(),
       notes: document.getElementById('spotNotes').value.trim(),
+      photoDataUrl,
       createdAt: new Date().toISOString(),
     };
 
@@ -166,6 +182,7 @@ const SpotterLogModule = (() => {
   function clearTabForm() {
     document.getElementById('spotterForm').reset();
     document.getElementById('spotDate').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('spotTime').value = currentTimeHHMM();
     document.getElementById('coordHint').textContent = '';
   }
 
@@ -188,6 +205,7 @@ const SpotterLogModule = (() => {
     saveEntries();
     renderList();
     renderMapPins();
+    publishChecklistData();
   }
 
   function deleteEntry(id) {
@@ -195,13 +213,18 @@ const SpotterLogModule = (() => {
     saveEntries();
     renderList();
     renderMapPins();
+    publishChecklistData();
   }
 
   function filterEntries(query) {
-    if (!query) return entries;
+    const photoMode = document.getElementById('spotterPhotoFilter')?.value || 'all';
     return entries.filter(e => {
+      if (photoMode === 'with-photo' && !normalizeImage(e.photoDataUrl)) return false;
+      if (photoMode === 'no-photo' && normalizeImage(e.photoDataUrl)) return false;
+
+      if (!query) return true;
       const haystack = [
-        e.locomotiveNumber, e.railroad, e.notes, e.displayName, e.date
+        e.locomotiveNumber, e.railroad, e.notes, e.displayName, e.date, e.time
       ].join(' ').toLowerCase();
       return haystack.includes(query);
     });
@@ -212,6 +235,7 @@ const SpotterLogModule = (() => {
   function renderList(query = '') {
     const listEl = document.getElementById('spotterList');
     const filtered = filterEntries(query);
+    renderSummary(filtered.length);
 
     if (filtered.length === 0) {
       listEl.innerHTML = `<p class="empty-state">${query ? 'No entries match your search.' : 'No sightings logged yet. Add your first entry!'}</p>`;
@@ -220,10 +244,14 @@ const SpotterLogModule = (() => {
 
     listEl.innerHTML = filtered.map(entry => {
       const date = entry.date ? new Date(entry.date + 'T12:00:00').toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+      const time = entry.time || '—';
       const loco = entry.locomotiveNumber || '—';
       const rr = entry.railroad || '—';
       const loc = entry.displayName || (entry.lat != null ? `${entry.lat}, ${entry.lng}` : '—');
       const notes = entry.notes ? `<div class="entry-notes">${esc(entry.notes)}</div>` : '';
+      const photo = normalizeImage(entry.photoDataUrl)
+        ? `<img class="entry-photo" src="${entry.photoDataUrl}" alt="Sighting photo" loading="lazy"/>`
+        : '';
 
       return `<div class="spotter-entry" data-id="${esc(entry.id)}">
         <div class="entry-main">
@@ -231,8 +259,10 @@ const SpotterLogModule = (() => {
           <div class="entry-railroad">${esc(rr)}</div>
           <div class="entry-meta">
             <span>📅 ${date}</span>
+            <span>🕒 ${esc(time)}</span>
             ${loc !== '—' ? `<span>📍 ${esc(loc.length > 40 ? loc.slice(0, 40) + '…' : loc)}</span>` : ''}
           </div>
+          ${photo}
           ${notes}
         </div>
         <div class="entry-actions">
@@ -279,8 +309,9 @@ const SpotterLogModule = (() => {
       const loco = entry.locomotiveNumber || '?';
       const rr = entry.railroad || '';
       const date = entry.date || '';
+      const time = entry.time || '';
       marker.bindTooltip(
-        `<b>#${esc(loco)}</b>${rr ? ` · ${esc(rr)}` : ''}<br>${date}`,
+        `<b>#${esc(loco)}</b>${rr ? ` · ${esc(rr)}` : ''}<br>${date}${time ? ` ${esc(time)}` : ''}`,
         { className: 'train-tooltip', direction: 'top', offset: [0, -36] }
       );
 
@@ -302,6 +333,37 @@ const SpotterLogModule = (() => {
     URL.revokeObjectURL(url);
   }
 
+  function renderSummary(visibleCount) {
+    const total = entries.length;
+    const photoCount = entries.filter(e => normalizeImage(e.photoDataUrl)).length;
+    const summaryEl = document.getElementById('spotterSummary');
+    if (!summaryEl) return;
+    summaryEl.textContent = `${visibleCount} shown • ${total} total • ${photoCount} with photo`;
+  }
+
+  function publishChecklistData() {
+    const uniqueRailroads = new Set(
+      entries
+        .map(entry => (entry.railroad || '').trim().toLowerCase())
+        .filter(Boolean)
+    ).size;
+
+    const hasNight = entries.some(entry => {
+      const t = entry.time || '';
+      const hour = Number(t.slice(0, 2));
+      return Number.isFinite(hour) && (hour >= 20 || hour <= 5);
+    });
+
+    const payload = {
+      total: entries.length,
+      photoCount: entries.filter(e => normalizeImage(e.photoDataUrl)).length,
+      uniqueRailroads,
+      hasNight,
+    };
+
+    document.dispatchEvent(new CustomEvent('railyard:spotter-updated', { detail: payload }));
+  }
+
   // ── Utilities ─────────────────────────────────────────────────
 
   function esc(str) {
@@ -311,6 +373,35 @@ const SpotterLogModule = (() => {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  function readPhoto(inputId) {
+    const input = document.getElementById(inputId);
+    const file = input && input.files && input.files[0];
+    if (!file) return Promise.resolve(null);
+    if (!file.type.startsWith('image/')) return Promise.resolve(null);
+    if (file.size > 6 * 1024 * 1024) {
+      alert('Photo is too large (max 6 MB).');
+      return Promise.resolve(null);
+    }
+
+    return new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function normalizeImage(value) {
+    return typeof value === 'string' && value.startsWith('data:image/');
+  }
+
+  function currentTimeHHMM() {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
   }
 
   // Allow pre-filling lat/lng from map tab (if user switches tabs)

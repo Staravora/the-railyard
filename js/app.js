@@ -27,7 +27,13 @@
     // 7. Tab navigation
     initTabs();
 
-    // 8. Invalidate map size after tab switch
+    // 8. Legend toggle
+    initLegendToggle();
+
+    // 9. Spotlight + checklist widgets
+    initFunWidgets();
+
+    // 10. Invalidate map size after tab switch
     // (Leaflet needs to know its real dimensions)
     MapModule.getMap().invalidateSize();
   }
@@ -88,6 +94,85 @@
         });
       }
     });
+  }
+
+  function initLegendToggle() {
+    const btn = document.getElementById('legendToggleBtn');
+    const legend = document.getElementById('mapLegend');
+    if (!btn || !legend) return;
+
+    btn.addEventListener('click', () => {
+      const hidden = legend.hasAttribute('hidden');
+      if (hidden) {
+        legend.removeAttribute('hidden');
+        btn.classList.add('active');
+      } else {
+        legend.setAttribute('hidden', '');
+        btn.classList.remove('active');
+      }
+    });
+  }
+
+  function initFunWidgets() {
+    const routeEl = document.getElementById('spotlightRoute');
+    const metaEl = document.getElementById('spotlightMeta');
+    const checklistEl = document.getElementById('railfanChecklist');
+
+    document.addEventListener('railyard:train-stats', e => {
+      const spotlight = e.detail?.spotlight;
+      if (!spotlight || !routeEl || !metaEl) return;
+
+      routeEl.textContent = `${spotlight.routeName} #${spotlight.trainNumber}`;
+      const delayText = spotlight.delayMinutes > 0
+        ? `${spotlight.delayMinutes}m late`
+        : (spotlight.delayMinutes < -1 ? `${Math.abs(spotlight.delayMinutes)}m early` : 'on time');
+      metaEl.textContent = `${spotlight.speed} mph • ${delayText}${spotlight.nextStop ? ` • Next: ${spotlight.nextStop}` : ''}`;
+    });
+
+    document.addEventListener('railyard:spotter-updated', e => {
+      const data = e.detail;
+      if (!data || !checklistEl) return;
+      applyChecklist(checklistEl, data);
+    });
+
+    if (checklistEl) {
+      const stored = readSpotterSummaryFromStorage();
+      applyChecklist(checklistEl, stored);
+    }
+  }
+
+  function applyChecklist(checklistEl, data) {
+    if (!data || !checklistEl) return;
+
+    const items = checklistEl.querySelectorAll('li');
+    if (items.length < 4) return;
+
+    items[0].classList.toggle('done', data.total >= 1);
+    items[1].classList.toggle('done', data.photoCount >= 1);
+    items[2].classList.toggle('done', data.uniqueRailroads >= 3);
+    items[3].classList.toggle('done', data.hasNight === true);
+  }
+
+  function readSpotterSummaryFromStorage() {
+    try {
+      const entries = JSON.parse(localStorage.getItem('trainSpotterLog') || '[]');
+      const photoCount = entries.filter(entry => typeof entry.photoDataUrl === 'string' && entry.photoDataUrl.startsWith('data:image/')).length;
+      const uniqueRailroads = new Set(entries.map(entry => (entry.railroad || '').trim().toLowerCase()).filter(Boolean)).size;
+      const hasNight = entries.some(entry => {
+        const t = entry.time || '';
+        const hour = Number(t.slice(0, 2));
+        return Number.isFinite(hour) && (hour >= 20 || hour <= 5);
+      });
+
+      return {
+        total: entries.length,
+        photoCount,
+        uniqueRailroads,
+        hasNight,
+      };
+    } catch {
+      return { total: 0, photoCount: 0, uniqueRailroads: 0, hasNight: false };
+    }
   }
 
   // ── Start ──────────────────────────────────────────────────────
