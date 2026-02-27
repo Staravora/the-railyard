@@ -8,7 +8,7 @@ const TrainsModule = (() => {
   const POLL_INTERVAL_MS = 30000;
   const SIM_TICK_MS = 1000;
   const HIGH_ZOOM_LOCAL_MODE = 9;
-  const MAX_HEADING_EXTRAPOLATION_M = 350;
+  const MAX_HEADING_EXTRAPOLATION_M = 1200;
 
   // Map from train key → { marker, data }
   const activeMarkers = new Map();
@@ -276,7 +276,33 @@ const TrainsModule = (() => {
       const dt = Math.max(0.2, Math.min(2, (nowMs - (entry.lastTickMs || nowMs)) / 1000));
       entry.lastTickMs = nowMs;
 
-      if (zoom < HIGH_ZOOM_LOCAL_MODE && entry.motion.mode === 'route' && entry.motion.route) {
+      if (zoom >= HIGH_ZOOM_LOCAL_MODE && entry.motion.realFix) {
+        const elapsedSec = Math.max(0, (nowMs - (entry.motion.lastFixMs || nowMs)) / 1000);
+        const horizonSec = POLL_INTERVAL_MS / 1000;
+        const projected = projectLatLng(
+          entry.motion.realFix.lat,
+          entry.motion.realFix.lng,
+          train.heading || 0,
+          train.speed,
+          Math.min(elapsedSec, horizonSec)
+        );
+
+        const distFromFix = haversineMeters(entry.motion.realFix, projected);
+        const dynamicCap = Math.max(
+          MAX_HEADING_EXTRAPOLATION_M,
+          train.speed * 0.44704 * horizonSec * 1.1
+        );
+        const clamped = distFromFix > dynamicCap
+          ? pointFromBearing(entry.motion.realFix, train.heading || 0, dynamicCap)
+          : projected;
+
+        entry.motion.lat = clamped.lat;
+        entry.motion.lng = clamped.lng;
+        entry.marker.setLatLng([clamped.lat, clamped.lng]);
+        return;
+      }
+
+      if (entry.motion.mode === 'route' && entry.motion.route) {
         const meters = train.speed * 0.44704 * dt;
         const nextS = clamp(entry.motion.s + (meters * entry.motion.direction), 0, entry.motion.route.total);
         const nextPoint = interpolateRoutePoint(entry.motion.route, nextS);
@@ -288,11 +314,6 @@ const TrainsModule = (() => {
       }
 
       const current = entry.marker.getLatLng();
-      const realFix = entry.motion.realFix;
-      if (realFix && haversineMeters(current, realFix) >= MAX_HEADING_EXTRAPOLATION_M) {
-        return;
-      }
-
       const next = projectLatLng(current.lat, current.lng, train.heading || 0, train.speed, dt);
       entry.motion.lat = next.lat;
       entry.motion.lng = next.lng;
@@ -315,6 +336,7 @@ const TrainsModule = (() => {
           lat: point.lat,
           lng: point.lng,
           realFix: { lat: train.lat, lng: train.lng },
+          lastFixMs: Date.now(),
         };
       }
     }
@@ -327,6 +349,7 @@ const TrainsModule = (() => {
       lat: train.lat,
       lng: train.lng,
       realFix: { lat: train.lat, lng: train.lng },
+      lastFixMs: Date.now(),
     };
   }
 
@@ -499,6 +522,29 @@ const TrainsModule = (() => {
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
+  }
+
+  function pointFromBearing(origin, headingDeg, meters) {
+    const R = 6378137;
+    const heading = (headingDeg * Math.PI) / 180;
+    const lat1 = (origin.lat * Math.PI) / 180;
+    const lng1 = (origin.lng * Math.PI) / 180;
+    const dByR = meters / R;
+
+    const lat2 = Math.asin(
+      Math.sin(lat1) * Math.cos(dByR) +
+      Math.cos(lat1) * Math.sin(dByR) * Math.cos(heading)
+    );
+
+    const lng2 = lng1 + Math.atan2(
+      Math.sin(heading) * Math.sin(dByR) * Math.cos(lat1),
+      Math.cos(dByR) - Math.sin(lat1) * Math.sin(lat2)
+    );
+
+    return {
+      lat: (lat2 * 180) / Math.PI,
+      lng: (lng2 * 180) / Math.PI,
+    };
   }
 
   function tooltipContent(train) {
