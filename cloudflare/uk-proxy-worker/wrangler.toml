@@ -1,0 +1,11 @@
+name = "the-railyard-uk-proxy"
+main = "src/index.js"
+compatibility_date = "2026-02-27"
+
+# Set these with wrangler secrets/vars:
+# wrangler secret put NR_API_KEY
+# wrangler secret put NR_API_URL
+# wrangler secret put ALLOWED_ORIGIN
+
+[observability]
+enabled = true

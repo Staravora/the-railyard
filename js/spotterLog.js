@@ -38,6 +38,11 @@ const SpotterLogModule = (() => {
     // Log mode toggle
     document.getElementById('logModeBtn').addEventListener('click', toggleLogMode);
     document.getElementById('logModeCancelBtn').addEventListener('click', disableLogMode);
+    document.getElementById('logModeOpenTabBtn').addEventListener('click', () => {
+      disableLogMode();
+      const btn = document.querySelector('.tab-btn[data-tab="spotter"]');
+      if (btn) btn.click();
+    });
 
     // Search filter
     document.getElementById('spotterSearch').addEventListener('input', e => {
@@ -80,12 +85,15 @@ const SpotterLogModule = (() => {
     map.getContainer().style.cursor = 'crosshair';
   }
 
-  function disableLogMode() {
+  function disableLogMode(options = {}) {
+    const { clearPending = true } = options;
     logModeActive = false;
     document.getElementById('logModeBtn').classList.remove('active');
     document.getElementById('logModeBanner').hidden = true;
     map.getContainer().style.cursor = '';
-    pendingCoords = null;
+    if (clearPending) {
+      pendingCoords = null;
+    }
   }
 
   function onMapClick(e) {
@@ -93,9 +101,8 @@ const SpotterLogModule = (() => {
 
     const { lat, lng } = e.latlng;
     pendingCoords = { lat: lat.toFixed(5), lng: lng.toFixed(5) };
-
+    disableLogMode({ clearPending: false });
     openModal(pendingCoords);
-    disableLogMode();
   }
 
   // ── Modal ─────────────────────────────────────────────────────
@@ -137,7 +144,7 @@ const SpotterLogModule = (() => {
     const photoDataUrl = await readPhoto('mPhoto');
 
     const entry = {
-      id: crypto.randomUUID(),
+      id: makeId(),
       date: document.getElementById('mDate').value,
       time: document.getElementById('mTime').value,
       lat: parseFloat(pendingCoords.lat),
@@ -162,7 +169,7 @@ const SpotterLogModule = (() => {
     const photoDataUrl = await readPhoto('spotPhoto');
 
     const entry = {
-      id: crypto.randomUUID(),
+      id: makeId(),
       date: document.getElementById('spotDate').value,
       time: document.getElementById('spotTime').value,
       lat: isNaN(lat) ? null : lat,
@@ -402,6 +409,13 @@ const SpotterLogModule = (() => {
     const hh = String(now.getHours()).padStart(2, '0');
     const mm = String(now.getMinutes()).padStart(2, '0');
     return `${hh}:${mm}`;
+  }
+
+  function makeId() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return `spot-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
   }
 
   // Allow pre-filling lat/lng from map tab (if user switches tabs)

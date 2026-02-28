@@ -1735,6 +1735,35 @@ body::before {
   border-color: rgba(148, 163, 184, 0.35);
 }
 
+.provider-config-row {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.provider-config-row input {
+  width: 100%;
+  background: rgba(18, 16, 14, 0.96);
+  border: 1px solid rgba(255, 178, 44, 0.25);
+  color: #f6e8cd;
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 12px;
+}
+
+.provider-config-row input:focus {
+  outline: none;
+  border-color: rgba(255, 198, 98, 0.75);
+  box-shadow: var(--glow-soft);
+}
+
+.provider-config-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
 .list-subtitle {
   color: #bda881;
   font-size: 12px;

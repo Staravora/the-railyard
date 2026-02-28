@@ -33,7 +33,10 @@
     // 9. Spotlight + checklist widgets
     initFunWidgets();
 
-    // 10. Invalidate map size after tab switch
+    // 10. Provider config controls
+    initProviderConfigControls();
+
+    // 11. Invalidate map size after tab switch
     // (Leaflet needs to know its real dimensions)
     MapModule.getMap().invalidateSize();
   }
@@ -210,6 +213,57 @@
         <span class="provider-pill ${stateClass}">${stateLabel}</span>
       </li>`;
     }).join('');
+  }
+
+  function initProviderConfigControls() {
+    const input = document.getElementById('ukEndpointInput');
+    const saveBtn = document.getElementById('saveUkEndpointBtn');
+    const clearBtn = document.getElementById('clearUkEndpointBtn');
+    if (!input || !saveBtn || !clearBtn) return;
+
+    try {
+      const runtime = window.RAILYARD_PROVIDER_ENDPOINTS?.ukNetworkRail || '';
+      const stored = localStorage.getItem('railyard.ukNetworkRail.endpoint') || '';
+      input.value = stored || runtime;
+    } catch {
+      // Ignore storage/runtime access issues.
+    }
+
+    saveBtn.addEventListener('click', () => {
+      const value = input.value.trim();
+      if (!value) {
+        alert('Please enter a valid UK endpoint URL.');
+        return;
+      }
+
+      try {
+        new URL(value);
+      } catch {
+        alert('Endpoint URL is not valid.');
+        return;
+      }
+
+      try {
+        localStorage.setItem('railyard.ukNetworkRail.endpoint', value);
+      } catch {
+        alert('Could not store endpoint in browser storage.');
+        return;
+      }
+
+      alert('UK feed endpoint saved. Reloading to apply.');
+      window.location.reload();
+    });
+
+    clearBtn.addEventListener('click', () => {
+      try {
+        localStorage.removeItem('railyard.ukNetworkRail.endpoint');
+      } catch {
+        // Ignore storage issues.
+      }
+      input.value = '';
+      alert('UK feed endpoint cleared. Reloading to apply.');
+      window.location.reload();
+    });
   }
 
   // ── Start ──────────────────────────────────────────────────────

@@ -93,6 +93,7 @@
           <!-- Log mode banner -->
           <div class="log-mode-banner" id="logModeBanner" hidden>
             📍 Log Mode Active — click anywhere on the map to record a sighting
+            <button id="logModeOpenTabBtn">Open Spotter Log</button>
             <button id="logModeCancelBtn">Cancel</button>
           </div>
         </div>
@@ -120,6 +121,13 @@
             <ul class="provider-status-list" id="providerStatusList">
               <li class="provider-status-row">Loading providers…</li>
             </ul>
+            <div class="provider-config-row">
+              <input id="ukEndpointInput" type="url" placeholder="UK worker /uk/trains endpoint" />
+              <div class="provider-config-actions">
+                <button class="btn-secondary" id="saveUkEndpointBtn" type="button">Save UK Feed</button>
+                <button class="btn-secondary" id="clearUkEndpointBtn" type="button">Clear</button>
+              </div>
+            </div>
           </section>
           <div id="railHistoryContent" class="history-cards">
             <div class="history-loading">Loading rail history…</div>

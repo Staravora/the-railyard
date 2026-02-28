@@ -37,6 +37,13 @@ const UkNetworkRailProvider = (() => {
     if (typeof window !== 'undefined') {
       const runtime = window.RAILYARD_PROVIDER_ENDPOINTS;
       if (runtime && runtime.ukNetworkRail) return runtime.ukNetworkRail;
+
+      try {
+        const fromStorage = window.localStorage.getItem('railyard.ukNetworkRail.endpoint');
+        if (fromStorage) return fromStorage;
+      } catch {
+        // Ignore storage access issues.
+      }
     }
     return DEFAULT_URL;
   }
