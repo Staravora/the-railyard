@@ -38,8 +38,11 @@ const FeedRegistryModule = (() => {
       registerProvider(UkNetworkRailProvider);
     }
 
+    if (typeof FinlandProvider !== 'undefined') {
+      registerProvider(FinlandProvider);
+    }
+
     registerProvider(makePlaceholderProvider('de-db', 'Deutsche Bahn', 'DE'));
-    registerProvider(makePlaceholderProvider('fi-vr', 'VR', 'FI'));
     registerProvider(makePlaceholderProvider('fr-sncf', 'SNCF', 'FR'));
     registerProvider(makePlaceholderProvider('be-sncb', 'SNCB', 'BE'));
     registerProvider(makePlaceholderProvider('au-nsw', 'NSW TrainLink', 'AU'));
