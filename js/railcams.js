@@ -16,12 +16,12 @@ const RailcamsModule = (() => {
       id: 'tehachapi',
       name: 'Tehachapi Loop Watch',
       region: 'California, US',
-      note: 'Search-driven feed for Tehachapi live railcams and railfan streams.',
+      note: 'Channel feed focused on western freight corridors and railfan cams.',
       lat: 35.1314,
       lng: -118.4831,
       zoom: 11,
-      embedUrl: 'https://www.youtube.com/embed?listType=search&list=tehachapi+loop+railcam+live',
-      sourceUrl: 'https://www.youtube.com/results?search_query=tehachapi+loop+railcam+live',
+      embedUrl: 'https://www.youtube.com/embed/videoseries?list=UUIWjTTrzVo2RGgK2gortxGw',
+      sourceUrl: 'https://www.youtube.com/channel/UCIWjTTrzVo2RGgK2gortxGw',
       tags: ['BNSF', 'UP', 'Mountain grade'],
       filters: ['freight', 'mountain'],
     },
@@ -29,12 +29,12 @@ const RailcamsModule = (() => {
       id: 'cajon',
       name: 'Cajon Pass Dispatch View',
       region: 'California, US',
-      note: 'Good corridor for heavy freight movements through Southern California.',
+      note: 'Good corridor context for heavy freight movements through Southern California.',
       lat: 34.3208,
       lng: -117.4689,
       zoom: 10,
-      embedUrl: 'https://www.youtube.com/embed?listType=search&list=cajon+pass+railcam+live',
-      sourceUrl: 'https://www.youtube.com/results?search_query=cajon+pass+railcam+live',
+      embedUrl: 'https://www.youtube.com/embed/videoseries?list=UUW3ztjFA4AoU4pXCTKb4rMQ',
+      sourceUrl: 'https://www.youtube.com/channel/UCW3ztjFA4AoU4pXCTKb4rMQ',
       tags: ['BNSF', 'UP', 'Freight focus'],
       filters: ['freight', 'mountain'],
     },
@@ -42,12 +42,12 @@ const RailcamsModule = (() => {
       id: 'fort-madison',
       name: 'Fort Madison River Crossing',
       region: 'Iowa, US',
-      note: 'Mississippi River bridge activity and long freight consists.',
+      note: 'Midwest camera/archive feed with frequent long freight consists.',
       lat: 40.6306,
       lng: -91.3145,
       zoom: 12,
-      embedUrl: 'https://www.youtube.com/embed?listType=search&list=fort+madison+railcam+live',
-      sourceUrl: 'https://www.youtube.com/results?search_query=fort+madison+railcam+live',
+      embedUrl: 'https://www.youtube.com/embed/videoseries?list=UUHwO6ybr9_--FvMui3-2_EA',
+      sourceUrl: 'https://www.youtube.com/channel/UCHwO6ybr9_--FvMui3-2_EA',
       tags: ['BNSF', 'Amtrak', 'River crossing'],
       filters: ['freight'],
     },
@@ -55,12 +55,12 @@ const RailcamsModule = (() => {
       id: 'horseshoe',
       name: 'Horseshoe Curve Watch',
       region: 'Pennsylvania, US',
-      note: 'Iconic NS corridor with mixed manifest and intermodal traffic.',
+      note: 'Appalachian-focused feed suited to mixed manifest and intermodal traffic.',
       lat: 40.4967,
       lng: -78.4111,
       zoom: 12,
-      embedUrl: 'https://www.youtube.com/embed?listType=search&list=horseshoe+curve+railcam+live',
-      sourceUrl: 'https://www.youtube.com/results?search_query=horseshoe+curve+railcam+live',
+      embedUrl: 'https://www.youtube.com/embed/videoseries?list=UUrtIIVfi-5tMlVXdMDzOMUA',
+      sourceUrl: 'https://www.youtube.com/channel/UCrtIIVfi-5tMlVXdMDzOMUA',
       tags: ['Norfolk Southern', 'Helpers', 'Historic route'],
       filters: ['freight', 'mountain'],
     },
@@ -68,12 +68,12 @@ const RailcamsModule = (() => {
       id: 'chicago',
       name: 'Chicago Junctions',
       region: 'Illinois, US',
-      note: 'Dense interlocking and terminal rail action in the US rail hub.',
+      note: 'Urban terminal camera feed for dense North American rail hubs.',
       lat: 41.8781,
       lng: -87.6298,
       zoom: 9,
-      embedUrl: 'https://www.youtube.com/embed?listType=search&list=chicago+railcam+live',
-      sourceUrl: 'https://www.youtube.com/results?search_query=chicago+railcam+live',
+      embedUrl: 'https://www.youtube.com/embed/videoseries?list=UU1BPUOehswCUydiOQ6twZKw',
+      sourceUrl: 'https://www.youtube.com/channel/UC1BPUOehswCUydiOQ6twZKw',
       tags: ['Intermodal', 'Commuter', 'Freight bottleneck'],
       filters: ['freight', 'urban'],
     },
@@ -81,12 +81,12 @@ const RailcamsModule = (() => {
       id: 'canada-west',
       name: 'Western Canada Mainline',
       region: 'Alberta / BC, CA',
-      note: 'CPKC and CN mountain and prairie operations watch.',
+      note: 'Canada-oriented railcam/archive feed for long-haul operations.',
       lat: 51.0486,
       lng: -114.0708,
       zoom: 7,
-      embedUrl: 'https://www.youtube.com/embed?listType=search&list=canada+freight+railcam+live',
-      sourceUrl: 'https://www.youtube.com/results?search_query=canada+freight+railcam+live',
+      embedUrl: 'https://www.youtube.com/embed/videoseries?list=UU6YuojLzzdEMjbFiMHyecug',
+      sourceUrl: 'https://www.youtube.com/channel/UC6YuojLzzdEMjbFiMHyecug',
       tags: ['CPKC', 'CN', 'Long-haul freight'],
       filters: ['freight', 'mountain', 'canada'],
     },
@@ -95,6 +95,7 @@ const RailcamsModule = (() => {
   let selectedCamId = null;
   let activeFilter = 'all';
   let embedFallbackTimer = null;
+  let currentEmbedAttempt = 0;
 
   function init() {
     const list = document.getElementById('railcamList');
@@ -109,6 +110,8 @@ const RailcamsModule = (() => {
       const firstVisible = getVisibleCams()[0];
       selectedCamId = firstVisible ? firstVisible.id : CAMS[0].id;
     }
+
+    window.addEventListener('message', onPlayerMessage);
 
     selectCam(selectedCamId, { scrollIntoView: false });
   }
@@ -237,14 +240,26 @@ const RailcamsModule = (() => {
     fallbackOpen.href = sourceUrl;
     fallback.hidden = true;
 
+    const attempt = ++currentEmbedAttempt;
+    const normalized = normalizeEmbedUrl(embedUrl);
+    const isYoutube = isYoutubeEmbed(normalized);
+
     const showFallback = () => {
+      if (attempt !== currentEmbedAttempt) return;
       fallback.hidden = false;
       clearEmbedFallbackTimer();
     };
 
     iframe.onload = () => {
-      clearEmbedFallbackTimer();
-      fallback.hidden = true;
+      if (attempt !== currentEmbedAttempt) return;
+
+      if (!isYoutube) {
+        clearEmbedFallbackTimer();
+        fallback.hidden = true;
+        return;
+      }
+
+      startYoutubeHandshake();
     };
 
     iframe.onerror = () => {
@@ -257,12 +272,102 @@ const RailcamsModule = (() => {
     };
 
     clearEmbedFallbackTimer();
-    embedFallbackTimer = window.setTimeout(showFallback, 8000);
+    embedFallbackTimer = window.setTimeout(showFallback, isYoutube ? 2500 : 8000);
 
     iframe.src = 'about:blank';
     window.setTimeout(() => {
-      iframe.src = embedUrl;
+      if (attempt !== currentEmbedAttempt) return;
+      iframe.src = normalized;
     }, 30);
+
+    function startYoutubeHandshake() {
+      let pings = 0;
+      const ping = () => {
+        if (attempt !== currentEmbedAttempt) return;
+        pings += 1;
+        try {
+          iframe.contentWindow?.postMessage(JSON.stringify({
+            event: 'listening',
+            id: iframe.id,
+            channel: 'widget',
+          }), '*');
+        } catch {
+          // Ignore postMessage issues.
+        }
+
+        if (pings < 4) {
+          window.setTimeout(ping, 280);
+        }
+      };
+
+      ping();
+    }
+  }
+
+  function onPlayerMessage(event) {
+    const origin = String(event.origin || '');
+    if (!origin.includes('youtube.com') && !origin.includes('youtube-nocookie.com')) {
+      return;
+    }
+
+    const payload = parseMessage(event.data);
+    if (!payload) return;
+
+    const fallback = document.getElementById('railcamFallback');
+    if (!fallback) return;
+
+    const eventName = payload.event || payload.info?.playerState;
+    const hasReady = payload.event === 'onReady' || payload.info?.playerState === 1 || payload.info?.playerState === 2;
+    const hasError = payload.event === 'onError' || payload.info?.playerState === -1;
+
+    if (hasReady) {
+      clearEmbedFallbackTimer();
+      fallback.hidden = true;
+      return;
+    }
+
+    if (hasError || eventName === 'error') {
+      clearEmbedFallbackTimer();
+      fallback.hidden = false;
+    }
+  }
+
+  function parseMessage(raw) {
+    if (!raw) return null;
+    if (typeof raw === 'object') return raw;
+    if (typeof raw !== 'string') return null;
+
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  function normalizeEmbedUrl(url) {
+    try {
+      const parsed = new URL(url);
+      if (isYoutubeEmbed(parsed.href)) {
+        parsed.searchParams.set('enablejsapi', '1');
+        parsed.searchParams.set('playsinline', '1');
+        parsed.searchParams.set('origin', window.location.origin);
+      }
+      return parsed.toString();
+    } catch {
+      return url;
+    }
+  }
+
+  function isYoutubeEmbed(url) {
+    try {
+      const host = new URL(String(url)).hostname;
+      return host === 'www.youtube.com'
+        || host === 'youtube.com'
+        || host === 'www.youtube-nocookie.com'
+        || host === 'youtube-nocookie.com';
+    } catch {
+      return false;
+    }
   }
 
   function clearEmbedFallbackTimer() {
