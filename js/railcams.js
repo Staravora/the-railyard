@@ -3,6 +3,20 @@
  */
 
 const RailcamsModule = (() => {
+  const CAM_STATUS = {
+    UNKNOWN: 'unknown',
+    LIVE: 'live',
+    ENDED: 'ended',
+    OFFLINE: 'offline',
+    BLOCKED: 'blocked',
+  };
+
+  const STATUS_RESET_MS = {
+    ended: 8 * 60 * 1000,
+    offline: 12 * 60 * 1000,
+    blocked: 20 * 60 * 1000,
+  };
+
   const FILTERS = [
     { id: 'all', label: 'All' },
     { id: 'freight', label: 'Freight Heavy' },
@@ -340,6 +354,10 @@ const RailcamsModule = (() => {
   let activeFilter = 'all';
   let embedFallbackTimer = null;
   let currentEmbedAttempt = 0;
+  let activeCamId = null;
+  let autoSwitchTriedIds = new Set();
+  const camRuntime = new Map();
+  const resetTimers = new Map();
 
   function init() {
     const list = document.getElementById('railcamList');
@@ -348,6 +366,7 @@ const RailcamsModule = (() => {
     selectedCamId = readSelectedCamId() || CAMS[0].id;
     activeFilter = readSelectedFilter() || 'all';
     renderFilters();
+    initializeRuntimeStatuses();
     renderList();
 
     if (!isCamVisible(selectedCamId)) {
@@ -358,6 +377,18 @@ const RailcamsModule = (() => {
     window.addEventListener('message', onPlayerMessage);
 
     selectCam(selectedCamId, { scrollIntoView: false });
+  }
+
+  function initializeRuntimeStatuses() {
+    CAMS.forEach(cam => {
+      if (!camRuntime.has(cam.id)) {
+        camRuntime.set(cam.id, {
+          status: CAM_STATUS.UNKNOWN,
+          updatedAt: Date.now(),
+          lastLiveAt: 0,
+        });
+      }
+    });
   }
 
   function renderFilters() {
@@ -410,6 +441,7 @@ const RailcamsModule = (() => {
       <button class="railcam-item" type="button" data-cam-id="${escapeHtml(cam.id)}">
         <span class="railcam-item-title">${escapeHtml(cam.name)}</span>
         <span class="railcam-item-region">${escapeHtml(cam.region)}</span>
+        <span class="railcam-status-badge status-${getCamStatus(cam.id)}">${formatStatus(getCamStatus(cam.id))}</span>
         <span class="railcam-item-quality">${cam.geoPrecise ? 'Map-linked' : 'Feed not map-pinned'}</span>
         <span class="railcam-item-tags">${cam.tags.map(tag => `<em>${escapeHtml(tag)}</em>`).join('')}</span>
       </button>
@@ -427,6 +459,8 @@ const RailcamsModule = (() => {
     if (!cam) return;
 
     selectedCamId = cam.id;
+    activeCamId = cam.id;
+    autoSwitchTriedIds.clear();
     persistSelectedCamId(cam.id);
     paintSelection(cam.id);
     hydratePlayer(cam);
@@ -477,6 +511,13 @@ const RailcamsModule = (() => {
         }
       }));
     };
+
+    const status = getCamStatus(cam.id);
+    if (status !== CAM_STATUS.LIVE) {
+      setStatusMessage(`Checking feed status for ${cam.name}...`);
+    } else {
+      setStatusMessage('');
+    }
   }
 
   function setPlayerSource(embedUrl, sourceUrl) {
@@ -495,6 +536,7 @@ const RailcamsModule = (() => {
 
     const showFallback = () => {
       if (attempt !== currentEmbedAttempt) return;
+      handleCamUnavailable(activeCamId, 'timeout');
       fallback.hidden = false;
       clearEmbedFallbackTimer();
     };
@@ -512,6 +554,7 @@ const RailcamsModule = (() => {
     };
 
     iframe.onerror = () => {
+      handleCamUnavailable(activeCamId, 'error');
       showFallback();
     };
 
@@ -567,18 +610,157 @@ const RailcamsModule = (() => {
 
     const eventName = payload.event || payload.info?.playerState;
     const hasReady = payload.event === 'onReady' || payload.info?.playerState === 1 || payload.info?.playerState === 2;
-    const hasError = payload.event === 'onError' || payload.info?.playerState === -1;
+    const playerState = payload.info?.playerState;
+    const playerError = payload.info?.errorCode || payload.data;
+    const hasError = payload.event === 'onError' || playerState === -1 || playerError === 150 || playerError === 101;
+    const hasEnded = playerState === 0;
 
     if (hasReady) {
+      if (activeCamId) {
+        markCamLive(activeCamId);
+      }
       clearEmbedFallbackTimer();
       fallback.hidden = true;
       return;
     }
 
+    if (hasEnded) {
+      if (activeCamId) {
+        handleCamUnavailable(activeCamId, 'ended');
+      }
+      clearEmbedFallbackTimer();
+      fallback.hidden = false;
+      return;
+    }
+
     if (hasError || eventName === 'error') {
+      if (activeCamId) {
+        handleCamUnavailable(activeCamId, playerError === 150 || playerError === 101 ? 'blocked' : 'error');
+      }
       clearEmbedFallbackTimer();
       fallback.hidden = false;
     }
+  }
+
+  function handleCamUnavailable(camId, reason) {
+    if (!camId) return;
+    const runtime = camRuntime.get(camId);
+    const hadRecentLive = runtime?.lastLiveAt && (Date.now() - runtime.lastLiveAt) < 2 * 60 * 60 * 1000;
+
+    let nextStatus = CAM_STATUS.OFFLINE;
+    if (reason === 'blocked') nextStatus = CAM_STATUS.BLOCKED;
+    else if (reason === 'ended' || hadRecentLive || runtime?.status === CAM_STATUS.LIVE) nextStatus = CAM_STATUS.ENDED;
+
+    setCamStatus(camId, nextStatus);
+    scheduleStatusReset(camId, nextStatus);
+
+    const cam = getCamById(camId);
+    if (cam) {
+      setStatusMessage(`${cam.name} is ${formatStatus(nextStatus)}. Switching to next available feed...`);
+    }
+
+    maybeAutoSwitchFrom(camId);
+  }
+
+  function maybeAutoSwitchFrom(camId) {
+    autoSwitchTriedIds.add(camId);
+
+    const visible = getVisibleCams();
+    const currentIndex = Math.max(0, visible.findIndex(cam => cam.id === camId));
+    const ordered = [
+      ...visible.slice(currentIndex + 1),
+      ...visible.slice(0, currentIndex),
+    ];
+
+    const candidates = ordered
+      .filter(cam => !autoSwitchTriedIds.has(cam.id))
+      .map(cam => ({ cam, priority: statusPriority(getCamStatus(cam.id)) }))
+      .sort((a, b) => a.priority - b.priority);
+
+    const next = candidates.find(entry => entry.priority <= 1)?.cam || null;
+    if (!next) {
+      setStatusMessage('No live feeds right now. Keeping source links available while feeds recover.');
+      return;
+    }
+
+    autoSwitchTriedIds.add(next.id);
+    selectCam(next.id, { scrollIntoView: true });
+  }
+
+  function markCamLive(camId) {
+    if (!camId) return;
+    setCamStatus(camId, CAM_STATUS.LIVE);
+    autoSwitchTriedIds.clear();
+    setStatusMessage('');
+  }
+
+  function scheduleStatusReset(camId, status) {
+    const delay = STATUS_RESET_MS[status];
+    if (!delay) return;
+
+    if (resetTimers.has(camId)) {
+      window.clearTimeout(resetTimers.get(camId));
+    }
+
+    const timer = window.setTimeout(() => {
+      resetTimers.delete(camId);
+      if (getCamStatus(camId) === status) {
+        setCamStatus(camId, CAM_STATUS.UNKNOWN);
+        const cam = getCamById(camId);
+        if (cam && selectedCamId === camId) {
+          setStatusMessage(`Rechecking ${cam.name}...`);
+          hydratePlayer(cam);
+        }
+      }
+    }, delay);
+
+    resetTimers.set(camId, timer);
+  }
+
+  function setCamStatus(camId, status) {
+    if (!camId) return;
+    const prev = camRuntime.get(camId) || { status: CAM_STATUS.UNKNOWN, updatedAt: 0, lastLiveAt: 0 };
+    const next = {
+      ...prev,
+      status,
+      updatedAt: Date.now(),
+      lastLiveAt: status === CAM_STATUS.LIVE ? Date.now() : prev.lastLiveAt,
+    };
+    camRuntime.set(camId, next);
+    renderList();
+    paintSelection(selectedCamId);
+  }
+
+  function getCamStatus(camId) {
+    return camRuntime.get(camId)?.status || CAM_STATUS.UNKNOWN;
+  }
+
+  function statusPriority(status) {
+    if (status === CAM_STATUS.LIVE) return 0;
+    if (status === CAM_STATUS.UNKNOWN) return 1;
+    if (status === CAM_STATUS.ENDED) return 2;
+    if (status === CAM_STATUS.OFFLINE) return 3;
+    return 4;
+  }
+
+  function formatStatus(status) {
+    if (status === CAM_STATUS.LIVE) return 'Live';
+    if (status === CAM_STATUS.ENDED) return 'Ended';
+    if (status === CAM_STATUS.OFFLINE) return 'Offline';
+    if (status === CAM_STATUS.BLOCKED) return 'Blocked';
+    return 'Checking';
+  }
+
+  function setStatusMessage(message) {
+    const notes = document.getElementById('railcamNotes');
+    if (!notes) return;
+    const cam = getCamById(selectedCamId);
+    const base = cam ? cam.note : 'Live stream embeds may vary by source.';
+    notes.textContent = message ? `${message} ${base}` : base;
+  }
+
+  function getCamById(camId) {
+    return CAMS.find(cam => cam.id === camId) || null;
   }
 
   function parseMessage(raw) {

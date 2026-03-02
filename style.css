@@ -873,6 +873,39 @@ html, body {
   font-size: 12px;
 }
 
+.railcam-status-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 1px solid rgba(255, 178, 44, 0.22);
+  color: #e5cf9d;
+  background: rgba(41, 35, 22, 0.72);
+}
+
+.railcam-status-badge.status-live {
+  border-color: rgba(45, 206, 137, 0.55);
+  background: rgba(9, 69, 45, 0.62);
+  color: #abffd6;
+}
+
+.railcam-status-badge.status-ended {
+  border-color: rgba(255, 178, 44, 0.6);
+  background: rgba(89, 53, 10, 0.56);
+  color: #ffd998;
+}
+
+.railcam-status-badge.status-offline,
+.railcam-status-badge.status-blocked {
+  border-color: rgba(255, 95, 95, 0.45);
+  background: rgba(75, 20, 20, 0.55);
+  color: #ffc3c3;
+}
+
 .railcam-item-quality {
   color: #bda980;
   font-size: 11px;
