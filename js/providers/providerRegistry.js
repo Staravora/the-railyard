@@ -42,10 +42,24 @@ const FeedRegistryModule = (() => {
       registerProvider(FinlandProvider);
     }
 
-    registerProvider(makePlaceholderProvider('de-db', 'Deutsche Bahn', 'DE'));
+    if (typeof GermanyProvider !== 'undefined') {
+      registerProvider(GermanyProvider);
+    } else {
+      registerProvider(makePlaceholderProvider('de-db', 'Deutsche Bahn', 'DE'));
+    }
+
+    if (typeof MalaysiaProvider !== 'undefined') {
+      registerProvider(MalaysiaProvider);
+    }
+
+    if (typeof AustraliaProvider !== 'undefined') {
+      registerProvider(AustraliaProvider);
+    } else {
+      registerProvider(makePlaceholderProvider('au-nsw', 'NSW TrainLink', 'AU'));
+    }
+
     registerProvider(makePlaceholderProvider('fr-sncf', 'SNCF', 'FR'));
     registerProvider(makePlaceholderProvider('be-sncb', 'SNCB', 'BE'));
-    registerProvider(makePlaceholderProvider('au-nsw', 'NSW TrainLink', 'AU'));
   }
 
   function makePlaceholderProvider(id, label, country) {

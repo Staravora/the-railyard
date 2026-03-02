@@ -1,0 +1,10 @@
+{
+  "name": "railyard-functions",
+  "description": "Firebase Cloud Functions for The Railyard train tracker",
+  "engines": { "node": "20" },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-functions": "^6"
+  },
+  "private": true
+}
