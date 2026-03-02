@@ -1,5 +1,5 @@
 /**
- * railcams.js — North America rail camera directory + player.
+ * railcams.js — Rail camera directory + player.
  */
 
 const RailcamsModule = (() => {
@@ -8,87 +8,177 @@ const RailcamsModule = (() => {
     { id: 'freight', label: 'Freight Heavy' },
     { id: 'mountain', label: 'Mountain' },
     { id: 'urban', label: 'Urban' },
-    { id: 'canada', label: 'Canada' },
+    { id: 'international', label: 'International' },
   ];
 
   const CAMS = [
     {
-      id: 'tehachapi',
-      name: 'Tehachapi Loop Watch',
-      region: 'California, US',
-      note: 'Channel feed focused on western freight corridors and railfan cams.',
-      lat: 35.1314,
-      lng: -118.4831,
+      id: 'north-platte-west',
+      name: 'North Platte Golden Spike Tower (West)',
+      region: 'North Platte, Nebraska, US',
+      note: 'Live view of Union Pacific freight activity from the Golden Spike Tower.',
+      lat: 41.1347,
+      lng: -100.7730,
       zoom: 11,
-      embedUrl: 'https://www.youtube.com/embed/videoseries?list=UUIWjTTrzVo2RGgK2gortxGw',
-      sourceUrl: 'https://www.youtube.com/channel/UCIWjTTrzVo2RGgK2gortxGw',
-      tags: ['BNSF', 'UP', 'Mountain grade'],
-      filters: ['freight', 'mountain'],
-    },
-    {
-      id: 'cajon',
-      name: 'Cajon Pass Dispatch View',
-      region: 'California, US',
-      note: 'Good corridor context for heavy freight movements through Southern California.',
-      lat: 34.3208,
-      lng: -117.4689,
-      zoom: 10,
-      embedUrl: 'https://www.youtube.com/embed/videoseries?list=UUW3ztjFA4AoU4pXCTKb4rMQ',
-      sourceUrl: 'https://www.youtube.com/channel/UCW3ztjFA4AoU4pXCTKb4rMQ',
-      tags: ['BNSF', 'UP', 'Freight focus'],
-      filters: ['freight', 'mountain'],
-    },
-    {
-      id: 'fort-madison',
-      name: 'Fort Madison River Crossing',
-      region: 'Iowa, US',
-      note: 'Midwest camera/archive feed with frequent long freight consists.',
-      lat: 40.6306,
-      lng: -91.3145,
-      zoom: 12,
-      embedUrl: 'https://www.youtube.com/embed/videoseries?list=UUHwO6ybr9_--FvMui3-2_EA',
-      sourceUrl: 'https://www.youtube.com/channel/UCHwO6ybr9_--FvMui3-2_EA',
-      tags: ['BNSF', 'Amtrak', 'River crossing'],
+      embedUrl: 'https://www.youtube.com/embed/laKzBnfVIsQ',
+      sourceUrl: 'https://www.youtube.com/live/laKzBnfVIsQ',
+      tags: ['UP', 'Freight', 'Yard activity'],
       filters: ['freight'],
+      geoPrecise: true,
     },
     {
-      id: 'horseshoe',
-      name: 'Horseshoe Curve Watch',
-      region: 'Pennsylvania, US',
-      note: 'Appalachian-focused feed suited to mixed manifest and intermodal traffic.',
-      lat: 40.4967,
-      lng: -78.4111,
+      id: 'la-grange-ky',
+      name: 'La Grange Street Running',
+      region: 'La Grange, Kentucky, US',
+      note: 'Street-running trains through downtown La Grange.',
+      lat: 38.4067,
+      lng: -85.3788,
+      zoom: 13,
+      embedUrl: 'https://www.youtube.com/embed/9SLt3AT0rXk',
+      sourceUrl: 'https://www.youtube.com/live/9SLt3AT0rXk',
+      tags: ['Street running', 'Freight', 'VRF'],
+      filters: ['freight', 'urban'],
+      geoPrecise: true,
+    },
+    {
+      id: 'galesburg-il',
+      name: 'Galesburg Railcam',
+      region: 'Galesburg, Illinois, US',
+      note: 'High-volume Midwestern freight and passenger junction activity.',
+      lat: 40.9478,
+      lng: -90.3712,
       zoom: 12,
-      embedUrl: 'https://www.youtube.com/embed/videoseries?list=UUrtIIVfi-5tMlVXdMDzOMUA',
-      sourceUrl: 'https://www.youtube.com/channel/UCrtIIVfi-5tMlVXdMDzOMUA',
-      tags: ['Norfolk Southern', 'Helpers', 'Historic route'],
-      filters: ['freight', 'mountain'],
+      embedUrl: 'https://www.youtube.com/embed/On1MRt0NqFs',
+      sourceUrl: 'https://www.youtube.com/live/On1MRt0NqFs',
+      tags: ['BNSF', 'Amtrak', 'Freight'],
+      filters: ['freight'],
+      geoPrecise: true,
     },
     {
-      id: 'chicago',
-      name: 'Chicago Junctions',
-      region: 'Illinois, US',
-      note: 'Urban terminal camera feed for dense North American rail hubs.',
+      id: 'houston-tower-26',
+      name: 'Houston Tower 26',
+      region: 'Houston, Texas, US',
+      note: 'Live PTZ railcam covering Houston area traffic.',
+      lat: 29.7604,
+      lng: -95.3698,
+      zoom: 11,
+      embedUrl: 'https://www.youtube.com/embed/wKLX7B3Q01Q',
+      sourceUrl: 'https://www.youtube.com/live/wKLX7B3Q01Q',
+      tags: ['Freight', 'PTZ', 'Urban'],
+      filters: ['freight', 'urban'],
+      geoPrecise: true,
+    },
+    {
+      id: 'barstow-ca',
+      name: 'Barstow Subdivision PTZ',
+      region: 'Barstow, California, US',
+      note: 'BNSF Needles Sub mainline activity near Barstow.',
+      lat: 34.8958,
+      lng: -117.0173,
+      zoom: 11,
+      embedUrl: 'https://www.youtube.com/embed/Hsh-46qLpQE',
+      sourceUrl: 'https://www.youtube.com/live/Hsh-46qLpQE',
+      tags: ['BNSF', 'Desert mainline', 'Freight'],
+      filters: ['freight', 'mountain'],
+      geoPrecise: true,
+    },
+    {
+      id: 'kingman-az',
+      name: 'Kingman Seligman Sub PTZ',
+      region: 'Kingman, Arizona, US',
+      note: 'BNSF Seligman Sub freight corridor camera.',
+      lat: 35.1894,
+      lng: -114.0530,
+      zoom: 11,
+      embedUrl: 'https://www.youtube.com/embed/h8-J3JGU7g4',
+      sourceUrl: 'https://www.youtube.com/live/h8-J3JGU7g4',
+      tags: ['BNSF', 'Freight', 'Southwest'],
+      filters: ['freight', 'mountain'],
+      geoPrecise: true,
+    },
+    {
+      id: 'oklahoma-city-ptz',
+      name: 'Oklahoma City PTZ',
+      region: 'Oklahoma City, Oklahoma, US',
+      note: 'Live city railcam by OMRA with mixed rail traffic.',
+      lat: 35.4676,
+      lng: -97.5164,
+      zoom: 11,
+      embedUrl: 'https://www.youtube.com/embed/jdUc9qYuFHw',
+      sourceUrl: 'https://www.youtube.com/live/jdUc9qYuFHw',
+      tags: ['City cam', 'Freight', 'PTZ'],
+      filters: ['freight', 'urban'],
+      geoPrecise: true,
+    },
+    {
+      id: 'chicago-powerhouse-east',
+      name: 'Chicago Power House (East)',
+      region: 'Chicago, Illinois, US',
+      note: 'Steel Highway live camera covering Chicago traffic.',
       lat: 41.8781,
       lng: -87.6298,
-      zoom: 9,
-      embedUrl: 'https://www.youtube.com/embed/videoseries?list=UU1BPUOehswCUydiOQ6twZKw',
-      sourceUrl: 'https://www.youtube.com/channel/UC1BPUOehswCUydiOQ6twZKw',
-      tags: ['Intermodal', 'Commuter', 'Freight bottleneck'],
+      zoom: 11,
+      embedUrl: 'https://www.youtube.com/embed/6M6rK0ssjYg',
+      sourceUrl: 'https://www.youtube.com/live/6M6rK0ssjYg',
+      tags: ['Chicago', 'Freight', 'Urban'],
       filters: ['freight', 'urban'],
+      geoPrecise: true,
     },
     {
-      id: 'canada-west',
-      name: 'Western Canada Mainline',
-      region: 'Alberta / BC, CA',
-      note: 'Canada-oriented railcam/archive feed for long-haul operations.',
-      lat: 51.0486,
-      lng: -114.0708,
-      zoom: 7,
-      embedUrl: 'https://www.youtube.com/embed/videoseries?list=UU6YuojLzzdEMjbFiMHyecug',
-      sourceUrl: 'https://www.youtube.com/channel/UC6YuojLzzdEMjbFiMHyecug',
-      tags: ['CPKC', 'CN', 'Long-haul freight'],
-      filters: ['freight', 'mountain', 'canada'],
+      id: 'chicago-powerhouse-cta',
+      name: 'Chicago Power House (CTA)',
+      region: 'Chicago, Illinois, US',
+      note: 'Chicago rail activity with CTA context from Steel Highway.',
+      lat: 41.8781,
+      lng: -87.6298,
+      zoom: 11,
+      embedUrl: 'https://www.youtube.com/embed/grl50cJ7Fq0',
+      sourceUrl: 'https://www.youtube.com/live/grl50cJ7Fq0',
+      tags: ['Chicago', 'CTA', 'Urban rail'],
+      filters: ['urban'],
+      geoPrecise: true,
+    },
+    {
+      id: 'mendota-il',
+      name: 'Mendota Union Depot',
+      region: 'Mendota, Illinois, US',
+      note: 'Mainline railcam at Mendota Union Depot Railroad Museum.',
+      lat: 41.5473,
+      lng: -89.1179,
+      zoom: 12,
+      embedUrl: 'https://www.youtube.com/embed/zDZYrkvu044',
+      sourceUrl: 'https://www.youtube.com/live/zDZYrkvu044',
+      tags: ['BNSF', 'Mainline', 'Museum'],
+      filters: ['freight'],
+      geoPrecise: true,
+    },
+    {
+      id: 'tokyo-shinjuku',
+      name: 'Tokyo Shinjuku JR Live Cam',
+      region: 'Shinjuku, Tokyo, Japan',
+      note: 'Urban JR corridor live camera in central Tokyo.',
+      lat: 35.6938,
+      lng: 139.7034,
+      zoom: 13,
+      embedUrl: 'https://www.youtube.com/embed/GLQhbRGv5qU',
+      sourceUrl: 'https://www.youtube.com/live/GLQhbRGv5qU',
+      tags: ['Japan', 'JR', 'Urban'],
+      filters: ['urban', 'international'],
+      geoPrecise: true,
+    },
+    {
+      id: 'norway-cab-views',
+      name: 'Norway Winter Cab Views',
+      region: 'Norway (route-based)',
+      note: 'Rail cab stream, route-based footage rather than one fixed camera.',
+      lat: 60.4720,
+      lng: 8.4689,
+      zoom: 5,
+      embedUrl: 'https://www.youtube.com/embed/tAWFO8_O_7M',
+      sourceUrl: 'https://www.youtube.com/live/tAWFO8_O_7M',
+      tags: ['Cab ride', 'Norway', 'Scenic'],
+      filters: ['mountain', 'international'],
+      geoPrecise: false,
     },
   ];
 
@@ -166,6 +256,7 @@ const RailcamsModule = (() => {
       <button class="railcam-item" type="button" data-cam-id="${escapeHtml(cam.id)}">
         <span class="railcam-item-title">${escapeHtml(cam.name)}</span>
         <span class="railcam-item-region">${escapeHtml(cam.region)}</span>
+        <span class="railcam-item-quality">${cam.geoPrecise ? 'Map-linked' : 'Feed not map-pinned'}</span>
         <span class="railcam-item-tags">${cam.tags.map(tag => `<em>${escapeHtml(tag)}</em>`).join('')}</span>
       </button>
     `).join('');
@@ -212,13 +303,17 @@ const RailcamsModule = (() => {
 
     title.textContent = cam.name;
     region.textContent = cam.region;
-    meta.textContent = `${cam.tags.join(' • ')}`;
+    meta.textContent = `${cam.tags.join(' • ')} • ${cam.geoPrecise ? 'Map-linked feed' : 'Not location-specific'}`;
     notes.textContent = cam.note;
 
     setPlayerSource(cam.embedUrl, cam.sourceUrl);
     openBtn.href = cam.sourceUrl;
 
+    mapBtn.disabled = !cam.geoPrecise;
+    mapBtn.textContent = cam.geoPrecise ? 'Jump To Map' : 'Map Not Exact';
+
     mapBtn.onclick = () => {
+      if (!cam.geoPrecise) return;
       document.dispatchEvent(new CustomEvent('railyard:focus-map', {
         detail: {
           lat: cam.lat,
@@ -387,7 +482,7 @@ const RailcamsModule = (() => {
     if (!title || !region || !meta || !notes || !iframe || !openBtn) return;
 
     title.textContent = 'No camera in this filter';
-    region.textContent = 'North America';
+    region.textContent = 'Global';
     meta.textContent = 'Try another filter chip';
     notes.textContent = 'Switch filters to continue browsing live camera sources.';
     iframe.src = 'about:blank';
