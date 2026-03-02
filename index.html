@@ -21,6 +21,7 @@
     </div>
     <nav class="tab-nav" role="tablist">
       <button class="tab-btn active" data-tab="map" role="tab" aria-selected="true">Live Map</button>
+      <button class="tab-btn" data-tab="railcams" role="tab" aria-selected="false">Railcams</button>
       <button class="tab-btn" data-tab="spotter" role="tab" aria-selected="false">Spotter Log</button>
     </nav>
     <div class="header-right">
@@ -134,6 +135,61 @@
           </div>
         </aside>
 
+      </div>
+    </section>
+
+    <!-- RAILCAMS TAB -->
+    <section class="tab-pane" id="tab-railcams" role="tabpanel" hidden>
+      <div class="railcams-layout">
+        <aside class="railcam-list-panel">
+          <h2>North America Cam Feeds</h2>
+          <p class="railcams-subtitle">Curated live feed searches and camera hubs focused on major rail corridors.</p>
+          <div id="railcamFilters" class="railcam-filters" aria-label="Railcam filters"></div>
+          <div id="railcamList" class="railcam-list">
+            <p class="empty-state">Loading rail camera directory…</p>
+          </div>
+        </aside>
+
+        <div class="railcam-main-panel">
+          <div class="railcam-player-shell">
+            <div class="railcam-player-header">
+              <div>
+                <p class="railcam-kicker" id="railcamRegion">North America</p>
+                <h2 id="railcamTitle">Select a camera feed</h2>
+                <p id="railcamMeta" class="railcam-meta">Choose a corridor to start watching.</p>
+              </div>
+              <div class="railcam-actions">
+                <button class="btn-secondary" id="railcamMapBtn" type="button">Jump To Map</button>
+                <a class="btn-secondary railcam-link-btn" id="railcamOpenBtn" href="#" target="_blank" rel="noopener noreferrer">Open Source</a>
+              </div>
+            </div>
+            <iframe
+              id="railcamPlayer"
+              class="railcam-player"
+              title="Railcam player"
+              src="about:blank"
+              loading="lazy"
+              allow="autoplay; encrypted-media; picture-in-picture"
+              referrerpolicy="no-referrer-when-downgrade"
+            ></iframe>
+            <div id="railcamFallback" class="railcam-fallback" hidden>
+              <p class="railcam-fallback-title">Embed unavailable for this source.</p>
+              <p class="railcam-fallback-copy">Open the source directly, then pick another camera if needed.</p>
+              <div class="railcam-fallback-actions">
+                <a class="btn-secondary railcam-link-btn" id="railcamFallbackOpen" href="#" target="_blank" rel="noopener noreferrer">Open Source</a>
+                <button class="btn-secondary" id="railcamRetryBtn" type="button">Retry Embed</button>
+              </div>
+            </div>
+            <p id="railcamNotes" class="railcam-notes">Live stream embeds may vary by source.</p>
+          </div>
+
+          <section class="freight-intel-panel">
+            <h3>Freight Activity Intel</h3>
+            <p class="freight-intel-subtitle">No public nationwide freight GPS feed exists. This panel tracks practical signals instead.</p>
+            <div id="freightSignals" class="freight-signal-grid"></div>
+            <div id="freightSpotterSummary" class="freight-spotter-summary"></div>
+          </section>
+        </div>
       </div>
     </section>
 
@@ -275,6 +331,8 @@
   <script src="js/providers/australiaProvider.js"></script>
   <script src="js/providers/providerRegistry.js"></script>
   <script src="js/trains.js"></script>
+  <script src="js/railcams.js"></script>
+  <script src="js/freightIntel.js"></script>
   <script src="js/spotterLog.js"></script>
   <script src="js/railHistory.js"></script>
   <script src="js/app.js"></script>

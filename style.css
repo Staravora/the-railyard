@@ -772,6 +772,315 @@ html, body {
 }
 
 /* ============================================================
+   RAILCAMS TAB
+   ============================================================ */
+.railcams-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  height: 100%;
+  overflow: hidden;
+}
+
+.railcam-list-panel {
+  background:
+    linear-gradient(180deg, rgba(18, 16, 14, 0.98), rgba(11, 10, 10, 0.98)),
+    radial-gradient(420px 260px at 0% 0%, rgba(255, 178, 44, 0.08), transparent 72%);
+  border-right: 1px solid rgba(255, 178, 44, 0.2);
+  padding: 18px 14px;
+  overflow-y: auto;
+}
+
+.railcam-list-panel h2 {
+  font-family: 'Oswald', sans-serif;
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ffcc73;
+  margin-bottom: 4px;
+}
+
+.railcams-subtitle {
+  color: #cbb88f;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.railcam-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.railcam-filter-chip {
+  border: 1px solid rgba(255, 178, 44, 0.28);
+  border-radius: 999px;
+  background: rgba(25, 22, 19, 0.9);
+  color: #e8d6b2;
+  padding: 4px 10px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.railcam-filter-chip:hover {
+  border-color: rgba(255, 178, 44, 0.6);
+}
+
+.railcam-filter-chip.active {
+  background: linear-gradient(180deg, #ffd98f, #ffb22c);
+  color: #2b1800;
+  border-color: rgba(255, 194, 88, 0.74);
+}
+
+.railcam-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.railcam-item {
+  background: linear-gradient(180deg, rgba(26, 23, 21, 0.94), rgba(19, 17, 16, 0.94));
+  border: 1px solid rgba(255, 178, 44, 0.2);
+  border-radius: 10px;
+  color: #f2e6cd;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.railcam-item:hover {
+  border-color: rgba(255, 178, 44, 0.55);
+  box-shadow: var(--glow-soft);
+}
+
+.railcam-item.active {
+  border-color: rgba(255, 198, 98, 0.78);
+  background: linear-gradient(180deg, rgba(55, 39, 13, 0.65), rgba(29, 22, 12, 0.75));
+}
+
+.railcam-item-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.railcam-item-region {
+  color: #d8c39b;
+  font-size: 12px;
+}
+
+.railcam-item-tags {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.railcam-item-tags em {
+  font-style: normal;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid rgba(255, 178, 44, 0.25);
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: #f0d59c;
+}
+
+.railcam-main-panel {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.railcam-player-shell {
+  border: 1px solid rgba(255, 178, 44, 0.24);
+  border-radius: 12px;
+  background: rgba(12, 11, 10, 0.9);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  min-height: 460px;
+  display: flex;
+  flex-direction: column;
+}
+
+.railcam-player-header {
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid rgba(255, 178, 44, 0.2);
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.railcam-kicker {
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #d4bf93;
+}
+
+.railcam-meta {
+  color: #d9c7a0;
+  font-size: 12px;
+}
+
+.railcam-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.railcam-link-btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.railcam-player {
+  width: 100%;
+  flex: 1;
+  min-height: 340px;
+  border: 0;
+  background: #0a0a0a;
+}
+
+.railcam-fallback {
+  margin: 14px;
+  border: 1px solid rgba(255, 178, 44, 0.32);
+  border-radius: 10px;
+  background: rgba(36, 29, 20, 0.78);
+  padding: 12px;
+}
+
+.railcam-fallback-title {
+  color: #ffe1a9;
+  font-weight: 700;
+}
+
+.railcam-fallback-copy {
+  color: #d7c298;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.railcam-fallback-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.railcam-notes {
+  padding: 8px 12px;
+  border-top: 1px solid rgba(255, 178, 44, 0.16);
+  color: #c8b589;
+  font-size: 12px;
+}
+
+.freight-intel-panel {
+  border: 1px solid rgba(255, 178, 44, 0.24);
+  border-radius: 12px;
+  background: rgba(16, 14, 13, 0.92);
+  padding: 12px;
+}
+
+.freight-intel-panel h3 {
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ffd58c;
+}
+
+.freight-intel-subtitle {
+  color: #ccb991;
+  font-size: 12px;
+  margin-top: 4px;
+  margin-bottom: 10px;
+}
+
+.freight-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.freight-signal-card {
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid rgba(255, 178, 44, 0.2);
+  border-radius: 10px;
+  background: rgba(25, 22, 19, 0.9);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.freight-signal-card:hover {
+  border-color: rgba(255, 178, 44, 0.58);
+  box-shadow: var(--glow-soft);
+}
+
+.freight-signal-title {
+  color: #ffe7ba;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.freight-signal-detail {
+  color: #cbb892;
+  font-size: 11px;
+}
+
+.freight-spotter-summary {
+  margin-top: 10px;
+  border-top: 1px solid rgba(255, 178, 44, 0.17);
+  padding-top: 10px;
+}
+
+.freight-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.freight-stat {
+  border: 1px solid rgba(255, 178, 44, 0.18);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(22, 20, 17, 0.88);
+}
+
+.freight-stat-label {
+  display: block;
+  color: #cbb892;
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.freight-stat-value {
+  display: block;
+  color: #ffe9bf;
+  font-size: 18px;
+  font-family: 'Oswald', sans-serif;
+  letter-spacing: 0.04em;
+}
+
+.freight-summary-note {
+  margin-top: 8px;
+  color: #cfbb8f;
+  font-size: 12px;
+}
+
+/* ============================================================
    BUTTONS
    ============================================================ */
 .btn-primary {
@@ -893,6 +1202,25 @@ html, body {
 @media (max-width: 900px) {
   .history-sidebar { display: none; }
 
+  .railcams-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .railcam-list-panel {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 178, 44, 0.2);
+    max-height: 42vh;
+  }
+
+  .freight-signal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .freight-summary-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .spotter-layout {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
@@ -913,6 +1241,25 @@ html, body {
   .tab-nav { margin: 0; }
 
   .modal { width: calc(100vw - 32px); }
+
+  .railcam-player-header {
+    flex-direction: column;
+  }
+
+  .railcam-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .freight-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .railcam-fallback-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ============================================================

@@ -27,13 +27,26 @@
     // 7. Tab navigation
     initTabs();
 
-    // 8. Legend toggle
+    // 8. Cross-module map focus bridge
+    initMapFocusBridge();
+
+    // 9. Railcams
+    if (typeof RailcamsModule !== 'undefined') {
+      RailcamsModule.init();
+    }
+
+    // 10. Freight activity intel
+    if (typeof FreightIntelModule !== 'undefined') {
+      FreightIntelModule.init();
+    }
+
+    // 11. Legend toggle
     initLegendToggle();
 
-    // 9. Spotlight + checklist widgets
+    // 12. Spotlight + checklist widgets
     initFunWidgets();
 
-    // 10. Provider config controls
+    // 13. Provider config controls
     initProviderConfigControls();
 
     // 11. Invalidate map size after tab switch
@@ -71,6 +84,44 @@
             MapModule.getMap().invalidateSize();
           });
         }
+      });
+    });
+  }
+
+  function setActiveTab(targetTab) {
+    const buttons = document.querySelectorAll('.tab-btn');
+    const panes = document.querySelectorAll('.tab-pane');
+
+    buttons.forEach(btn => {
+      const isTarget = btn.dataset.tab === targetTab;
+      btn.classList.toggle('active', isTarget);
+      btn.setAttribute('aria-selected', isTarget ? 'true' : 'false');
+    });
+
+    panes.forEach(pane => {
+      const isTarget = pane.id === `tab-${targetTab}`;
+      pane.hidden = !isTarget;
+      pane.classList.toggle('active', isTarget);
+    });
+  }
+
+  function initMapFocusBridge() {
+    document.addEventListener('railyard:focus-map', event => {
+      const detail = event.detail || {};
+      const lat = Number(detail.lat);
+      const lng = Number(detail.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+      setActiveTab('map');
+
+      requestAnimationFrame(() => {
+        const map = MapModule.getMap();
+        if (!map) return;
+        map.invalidateSize();
+        map.flyTo([lat, lng], Number(detail.zoom) || 10, {
+          animate: true,
+          duration: 1.2,
+        });
       });
     });
   }
